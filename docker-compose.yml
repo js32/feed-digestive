@@ -1,0 +1,15 @@
+services:
+  digest:
+    build: .
+    container_name: rss-digest
+    restart: unless-stopped
+    env_file: .env
+    volumes:
+      - ./data:/data              # Zustand, Digests, feed.xml
+      - ./config:/config:ro       # interests.md, examples.txt (live editierbar)
+    ports:
+      - "127.0.0.1:8087:8080"     # nur lokal – nginx auf dem Host leitet weiter
+    extra_hosts:
+      - "host.docker.internal:host-gateway"   # für Ollama/Miniflux auf dem Host
+    # Falls Miniflux in einem anderen Compose-Projekt läuft, kannst du es auch
+    # über ein gemeinsames Docker-Netz erreichen (siehe README).

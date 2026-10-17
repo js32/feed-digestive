@@ -1,0 +1,4 @@
+# Zuletzt gespeicherte Artikel (neueste zuerst). Format: [Tags] Quelle: Titel
+# Erzeugen aus einem Read-Later-Export:
+#   python3 tools/import_readlater.py ReadLater.json config/examples.txt 200
+[Thema A] example.org: ein beispielhafter artikeltitel
