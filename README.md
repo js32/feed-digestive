@@ -58,6 +58,27 @@ Zwei Stufen, getrennt konfigurierbar (`SCORING_*` und `SUMMARY_*`):
 
 Mischen geht, z. B. Bewertung lokal mit Ollama und Auszüge mit Claude.
 
+### Lokal bewerten, per API zusammenfassen
+
+```bash
+docker compose --profile local up -d
+docker compose exec ollama ollama pull qwen3.5:4b
+```
+`.env`:
+```
+SCORING_PROVIDER=ollama
+SCORING_MODEL=qwen3.5:4b
+OLLAMA_BASE_URL=http://ollama:11434/v1
+SCORING_BATCH_SIZE=15
+EXAMPLES_IN_PROMPT=40
+SUMMARY_PROVIDER=mistral          # oder anthropic, openai …
+SUMMARY_MODEL=mistral-medium-latest
+```
+Dann gehen nur noch die ~10 ausgewählten Artikel an die API, nicht mehr alle 300
+und nicht mehr dein vollständiges Profil mit allen Beispielen. Auf einer CPU dauert ein
+Lauf je nach Artikelmenge eine halbe bis mehrere Stunden; da er nachts läuft, ist das egal.
+Bei sehr langsamen Läufen: `MAX_ENTRIES` senken oder `CATEGORY_IDS` setzen.
+
 **Volumen pro Tag** (grob): bei 300 neuen Artikeln etwa 8 Bewertungs-Aufrufe mit je ca.
 10–15 k Eingabe-Token (Profil + 40 Anrisse) und 10 Auszug-Aufrufe mit je ca. 5–8 k Token.
 Mit `EXAMPLES_IN_PROMPT`, `SCORING_BATCH_SIZE` und `CATEGORY_IDS` lässt sich das senken.

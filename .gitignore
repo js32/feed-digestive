@@ -3,3 +3,4 @@ data/
 # persönliches Profil bleibt lokal
 config/
 __pycache__/
+ollama/

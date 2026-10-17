@@ -10,6 +10,22 @@ services:
     ports:
       - "127.0.0.1:8087:8080"     # nur lokal – nginx auf dem Host leitet weiter
     extra_hosts:
-      - "host.docker.internal:host-gateway"   # für Ollama/Miniflux auf dem Host
-    # Falls Miniflux in einem anderen Compose-Projekt läuft, kannst du es auch
-    # über ein gemeinsames Docker-Netz erreichen (siehe README).
+      - "host.docker.internal:host-gateway"   # für Dienste auf dem Host
+
+  # Optional: lokales Modell zum Bewerten. Start mit:
+  #   docker compose --profile local up -d
+  #   docker compose exec ollama ollama pull qwen3.5:4b
+  # und in .env: SCORING_PROVIDER=ollama, OLLAMA_BASE_URL=http://ollama:11434/v1
+  ollama:
+    image: ollama/ollama:latest
+    container_name: rss-digest-ollama
+    profiles: ["local"]
+    restart: unless-stopped
+    volumes:
+      - ./ollama:/root/.ollama
+    environment:
+      # Standard-Kontext ist zu klein für Profil + 15 Artikel
+      - OLLAMA_CONTEXT_LENGTH=16384
+      - OLLAMA_KEEP_ALIVE=10m
+      - OLLAMA_NUM_PARALLEL=1
+    # kein Port nach außen nötig – digest erreicht ollama im Compose-Netz

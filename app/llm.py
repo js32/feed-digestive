@@ -19,9 +19,12 @@ class LLMError(RuntimeError):
 
 
 class LLM:
-    def __init__(self, provider: str, model: str, timeout: float = 120):
+    def __init__(self, provider: str, model: str, timeout: float | None = None):
         self.provider = provider
         self.model = model
+        # lokale Modelle auf CPU brauchen pro Aufruf schnell mehrere Minuten
+        default_timeout = 900 if provider in ("ollama", "custom") else 120
+        timeout = timeout or float(os.environ.get("LLM_TIMEOUT", default_timeout))
         self.http = httpx.Client(timeout=timeout)
         if provider == "anthropic":
             self.api_key = os.environ.get("ANTHROPIC_API_KEY", "")
@@ -41,13 +44,13 @@ class LLM:
         return f"{self.provider}:{self.model}"
 
     # ------------------------------------------------------------------
-    def complete(self, system: str, user: str, max_tokens: int = 2000) -> str:
+    def complete(self, system: str, user: str, max_tokens: int = 2000, json_mode: bool = False) -> str:
         last: Exception | None = None
         for attempt in range(5):
             try:
                 if self.provider == "anthropic":
                     return self._anthropic(system, user, max_tokens)
-                return self._openai(system, user, max_tokens)
+                return self._openai(system, user, max_tokens, json_mode)
             except httpx.HTTPStatusError as e:
                 code = e.response.status_code
                 last = e
@@ -79,7 +82,7 @@ class LLM:
         data = r.json()
         return "".join(b.get("text", "") for b in data.get("content", []) if b.get("type") == "text")
 
-    def _openai(self, system: str, user: str, max_tokens: int) -> str:
+    def _openai(self, system: str, user: str, max_tokens: int, json_mode: bool = False) -> str:
         headers = {"content-type": "application/json"}
         if self.api_key:
             headers["authorization"] = f"Bearer {self.api_key}"
@@ -89,6 +92,9 @@ class LLM:
         }
         # OpenAI selbst will bei neueren Modellen max_completion_tokens
         body["max_completion_tokens" if self.provider == "openai" else "max_tokens"] = max_tokens
+        # JSON-Modus: zwingt kleine lokale Modelle zu gültigem JSON
+        if json_mode and self.provider in ("ollama", "openai", "mistral"):
+            body["response_format"] = {"type": "json_object"}
         r = self.http.post(f"{self.base_url}/chat/completions", headers=headers, json=body)
         r.raise_for_status()
         data = r.json()
@@ -96,17 +102,19 @@ class LLM:
 
     # ------------------------------------------------------------------
     def complete_json(self, system: str, user: str, max_tokens: int = 2000):
-        text = self.complete(system, user, max_tokens)
+        text = self.complete(system, user, max_tokens, json_mode=True)
         try:
             return extract_json(text)
         except ValueError:
             log.warning("%s lieferte kein gültiges JSON, neuer Versuch", self)
-            text = self.complete(system, user + "\n\nAntworte AUSSCHLIESSLICH mit gültigem JSON.", max_tokens)
+            text = self.complete(system, user + "\n\nAntworte AUSSCHLIESSLICH mit gültigem JSON.", max_tokens,
+                                 json_mode=True)
             return extract_json(text)
 
 
 def extract_json(text: str):
-    text = text.strip()
+    # "Denk"-Abschnitte von Reasoning-Modellen (Qwen, DeepSeek …) entfernen
+    text = re.sub(r"<think>.*?</think>", "", text, flags=re.S).strip()
     text = re.sub(r"^```(?:json)?\s*|\s*```$", "", text)
     try:
         return json.loads(text)
