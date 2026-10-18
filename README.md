@@ -1,4 +1,6 @@
-# rss-digest
+# feed-digestive
+
+*Eats your RSS feeds, digests them overnight, serves you only the nutritious bits.*
 
 Holt täglich die neuen Artikel aus deinem **Miniflux**, lässt sie von einem LLM anhand
 deines Interessenprofils bewerten, schreibt zu den besten einen kurzen Auszug und
@@ -11,11 +13,11 @@ Miniflux-API ──► Filter/Dedupe ──► Bewertung (günstiges Modell, all
 
 ## Einrichtung
 
-1. **Dateien auf den VPS kopieren**, z. B. nach `/opt/rss-digest`.
+1. **Dateien auf den VPS kopieren**, z. B. nach `/opt/feed-digestive`.
 
 2. **Konfiguration anlegen**
    ```bash
-   cd /opt/rss-digest
+   cd /opt/feed-digestive
    cp .env.example .env
    cp -r config.example config   # dann config/interests.md mit deinen Interessen füllen
    openssl rand -hex 16          # -> als FEED_TOKEN in .env eintragen

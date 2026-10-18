@@ -1,4 +1,4 @@
-# rss-digest – täglicher Digest aus Miniflux als Atom-Feed
+# feed-digestive – täglicher Digest aus Miniflux als Atom-Feed
 #
 # Erststart:
 #   cp .env.example .env            # ausfüllen (siehe README)
@@ -22,8 +22,8 @@ services:
       args:
         # 1 = Image mit Laya-Vorfilter (PyTorch-CPU, ca. +1 GB), 0 = schlank ohne Laya
         WITH_LAYA: "${WITH_LAYA:-1}"
-    image: rss-digest:local
-    container_name: rss-digest
+    image: feed-digestive:local
+    container_name: feed-digestive
     restart: unless-stopped
     env_file: .env
     environment:
@@ -54,7 +54,7 @@ services:
   #   .env: SCORING_PROVIDER=ollama  OLLAMA_BASE_URL=http://ollama:11434/v1
   ollama:
     image: ollama/ollama:latest   # für reproduzierbare Updates auf eine Version festlegen
-    container_name: rss-digest-ollama
+    container_name: feed-digestive-ollama
     profiles: ["local"]
     restart: unless-stopped
     volumes:

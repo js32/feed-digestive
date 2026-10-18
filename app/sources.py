@@ -121,7 +121,7 @@ class GReaderSource(Source):
     def __init__(self, s):
         self.s = s
         self.base = s.greader_url.rstrip("/")
-        headers = {"User-Agent": "rss-digest/1.0"}
+        headers = {"User-Agent": "feed-digestive/1.0"}
         # Inoreader verlangt zusätzlich App-ID/Key (Entwickler-Konto)
         if s.greader_app_id:
             headers["AppId"] = s.greader_app_id

@@ -75,8 +75,8 @@ def write_feed(s: Settings, digests: list[dict]) -> None:
     latest = max((d["generated_at"] for d in digests), default=datetime.now(timezone.utc).isoformat())
     _el(root, "updated", latest)
     author = _el(root, "author")
-    _el(author, "name", "rss-digest")
-    _el(root, "generator", "rss-digest")
+    _el(author, "name", "feed-digestive")
+    _el(root, "generator", "feed-digestive")
 
     for d in sorted(digests, key=lambda d: d["generated_at"], reverse=True):
         if s.feed_mode == "daily":

@@ -28,7 +28,7 @@ class Miniflux:
     def __init__(self, base_url: str, token: str, timeout: float = 30):
         self.client = httpx.Client(
             base_url=base_url.rstrip("/") + "/v1",
-            headers={"X-Auth-Token": token, "User-Agent": "rss-digest/1.0"},
+            headers={"X-Auth-Token": token, "User-Agent": "feed-digestive/1.0"},
             timeout=timeout,
         )
 

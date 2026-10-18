@@ -24,7 +24,7 @@ from .feed import write_feed
 from .llm import LLM
 from .sources import make_source
 
-log = logging.getLogger("rss-digest")
+log = logging.getLogger("feed-digestive")
 _lock = threading.Lock()
 
 
@@ -58,7 +58,7 @@ def _make_handler(s: Settings):
     redirect_re = re.compile(rf"^{re.escape(prefix)}/r/([A-Za-z0-9_-]{{1,64}})$")
 
     class Handler(BaseHTTPRequestHandler):
-        server_version = "rss-digest"
+        server_version = "feed-digestive"
 
         def do_GET(self):  # noqa: N802
             path = self.path.split("?", 1)[0]
