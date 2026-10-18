@@ -91,7 +91,7 @@ itself is automatically excluded from the next digest.
 
 ## Configuration
 
-All settings live in `.env`. `.env.example` documents every option; the important groups:
+All settings live in `.env`. The most important ones are explained below; every option is listed in the [settings reference](#settings-reference).
 
 ### Sources
 
@@ -215,6 +215,140 @@ docker compose exec digest python -m app learn    # show what it has learned
 
 Data is kept in `data/history.jsonl` and `data/feedback.jsonl` for 180 days. Set
 `TRACK_CLICKS=false` to learn from stars only.
+
+## Settings reference
+
+All settings go into `.env`. Docker Compose also reads that file for the container
+settings at the end of this list. Changes to `.env` take effect after `docker compose up -d`.
+Files in `config/` are re-read on every run and need no restart.
+
+### Source
+
+| Setting | Default | Description |
+|---|---|---|
+| `SOURCE` | `miniflux` | Where articles come from: `miniflux` (native API) or `greader` (Google Reader API). |
+| `MINIFLUX_URL` | – | Base URL of your Miniflux instance, without `/v1`. |
+| `MINIFLUX_API_TOKEN` | – | API key from Miniflux → Settings → API Keys. |
+| `GREADER_URL` | – | Base URL of the Google Reader API, e.g. `https://freshrss.example.org/api/greader.php`. |
+| `GREADER_USER` | – | User name for the Google Reader API. |
+| `GREADER_PASSWORD` | – | API password (FreshRSS: the separate API password from your profile). |
+| `GREADER_APP_ID`, `GREADER_APP_KEY` | – | Only for Inoreader: app credentials from a developer account. |
+| `GREADER_LABELS` | – | Comma-separated folders/labels to read. Empty means all. |
+| `CATEGORY_IDS` | – | Miniflux only: comma-separated category IDs to read. Empty means all. |
+| `EXCLUDE_FEED_IDS` | – | Feeds to ignore, comma-separated. Miniflux: numeric IDs; Google Reader: `feed/https://…`. |
+
+### Which articles are considered
+
+| Setting | Default | Description |
+|---|---|---|
+| `SELECT_FROM` | `unread` | `unread`: every unread article is a candidate. `new`: only articles that arrived since the last run. |
+| `MAX_ENTRIES` | `400` | Upper limit of articles looked at per run (newest first). |
+| `UNREAD_MAX_AGE_DAYS` | `30` | With `unread`: ignore articles older than this. `0` = no limit. |
+| `LOOKBACK_HOURS` | `24` | With `new`: how far back the very first run looks. |
+| `ONLY_UNREAD` | `false` | With `new`: only take the unread ones among the new articles. |
+
+Articles are scored once and the scores reused; articles that already appeared in a digest
+are never shown again.
+
+### Laya pre-filter (local)
+
+| Setting | Default | Description |
+|---|---|---|
+| `PREFILTER` | `none` | `laya` scores all candidates locally first; only the best go to the LLM. `none` sends all candidates to the LLM. |
+| `PREFILTER_KEEP` | `40` | How many of Laya's best articles are passed on to the LLM. |
+| `PREFILTER_MIN` | `2.0` | Laya score (0–10) below which an article is dropped. At least 3 × `MIN_ITEMS` are always kept (up to `PREFILTER_KEEP`). |
+| `LAYA_MODEL` | `auto` | `auto`: English articles to the English checkpoint, others to the multilingual one. `multilingual` or `english`: one model for all (less RAM). |
+| `LAYA_MAX_LEN` | `1024` | Maximum tokens per article Laya reads. Lower (e.g. 512) is faster and uses less RAM. |
+| `LAYA_BATCH_SIZE` | `8` | Articles per forward pass. Lower (e.g. 2) uses less RAM. |
+| `LAYA_THREADS` | `0` | CPU threads for Laya. `0` lets PyTorch decide; set to your core count if only one core is busy. |
+| `LAYA_CHUNK` | `32` | Progress is logged and results are saved every N articles, so an aborted run loses nothing. |
+| `LAYA_DEVICE` | – | `cpu`, `cuda` or `xpu`. Empty lets Laya choose. |
+
+The questions Laya asks are in `config/laya_questions.json`.
+
+### LLM: scoring and excerpts
+
+| Setting | Default | Description |
+|---|---|---|
+| `SCORING_PROVIDER` | `anthropic` | Provider for scoring: `anthropic`, `openai`, `mistral`, `openrouter`, `gemini`, `ollama`, `custom`, or `none` (use the Laya score, requires `PREFILTER=laya`). |
+| `SCORING_MODEL` | – | Model name for scoring, e.g. `mistral-small-latest`. |
+| `SUMMARY_PROVIDER` | `anthropic` | Provider for the excerpts (same choices, except `none`). |
+| `SUMMARY_MODEL` | – | Model name for the excerpts, e.g. `mistral-medium-latest`. |
+| `SCORING_BATCH_SIZE` | `40` | Articles per scoring call. Use 10–15 for small local models. |
+| `EXAMPLES_IN_PROMPT` | `120` | How many lines of `config/examples.txt` are sent along. `0` keeps your reading history private. |
+| `USE_MINIFLUX_STARRED` | `true` | Send the titles of your 30 latest starred articles along as an interest signal (works for both sources). Stars are still used for local learning when `false`. |
+| `OUTPUT_LANGUAGE` | `Deutsch` | Language of titles, excerpts and "why read", regardless of the article's language. |
+| `LLM_MIN_INTERVAL` | `0` | Minimum seconds between two LLM calls. For free tiers with ~2 requests/minute use `31`. |
+| `SUMMARY_PARALLEL` | `4` | Excerpts written in parallel. `1` for rate-limited free tiers. |
+| `LLM_TIMEOUT` | `120` / `900` | Seconds per call. Default is 900 for `ollama` and `custom`, 120 for cloud APIs. |
+
+API keys and endpoints (only the ones for your provider are needed):
+
+| Setting | Description |
+|---|---|
+| `ANTHROPIC_API_KEY` | Anthropic API key. |
+| `OPENAI_API_KEY` | OpenAI API key. |
+| `MISTRAL_API_KEY` | Mistral API key. |
+| `OPENROUTER_API_KEY` | OpenRouter API key. |
+| `GEMINI_API_KEY` | Google Gemini API key. |
+| `OLLAMA_BASE_URL` | Ollama endpoint, default `http://host.docker.internal:11434/v1`. With the bundled container: `http://ollama:11434/v1`. |
+| `OLLAMA_API_KEY` | Usually empty. |
+| `CUSTOM_BASE_URL`, `CUSTOM_API_KEY` | Any OpenAI-compatible endpoint (LM Studio, vLLM, LiteLLM, …). |
+| `<PROVIDER>_BASE_URL` | Overrides the endpoint of any provider, e.g. `MISTRAL_BASE_URL`, `ANTHROPIC_BASE_URL`. |
+
+### Selection
+
+| Setting | Default | Description |
+|---|---|---|
+| `TOP_N` | `10` | Maximum number of articles per digest. |
+| `MIN_SCORE` | `6` | Articles scoring at least this (0–10) always go in, up to `TOP_N`. |
+| `MIN_ITEMS` | `5` | Minimum per digest: if fewer reach `MIN_SCORE`, the next best are added. |
+| `FLOOR_SCORE` | `3` | Never top up with articles scoring below this; the digest gets shorter instead. |
+| `EXPLORE_SLOTS` | `1` | Slots for a 🎲 random pick from just below the cut-off, against the filter bubble. `0` turns it off. |
+| `EXPLORE_MIN_REGULAR` | `4` | Only add the random pick once at least this many regular articles were selected. |
+
+At most 3 articles per source feed are taken, unless that's needed to reach `MIN_ITEMS`.
+
+### Learning
+
+| Setting | Default | Description |
+|---|---|---|
+| `TRACK_CLICKS` | `true` | Route digest links through `/<token>/r/<id>` and count clicks. `false` uses direct links and learns from stars only. |
+| `LEARN` | `true` | With Laya: learn weights from clicks and stars. |
+| `FEEDBACK_DAYS` | `3` | A shown article counts as "not interesting" only after this many days without a click. |
+
+### Output feed
+
+| Setting | Default | Description |
+|---|---|---|
+| `FEED_MODE` | `daily` | `daily`: one feed entry per digest with all articles. `items`: one feed entry per article. Takes effect on the next start. |
+| `FEED_TITLE` | `Mein Tages-Digest` | Title of the feed in your reader. |
+| `KEEP_DAYS` | `30` | How long digests stay in the feed. |
+| `PUBLIC_URL` | `http://localhost:8080` | Public base URL as your reader sees it, e.g. `https://digest.example.org`. Used for feed and click links. |
+| `FEED_TOKEN` | – | Secret path segment: the feed lives at `PUBLIC_URL/FEED_TOKEN/feed.xml`. Generate with `openssl rand -hex 16`. |
+
+### Schedule
+
+| Setting | Default | Description |
+|---|---|---|
+| `DIGEST_TIME` | `06:30` | Time of the daily run (HH:MM). |
+| `TZ` | `Europe/Berlin` | Time zone for the schedule and the dates in the digest. |
+| `RUN_ON_START` | `false` | Also run once right after the container starts. |
+
+### Container and paths
+
+These are read by Docker Compose (from the same `.env`) or are internal paths you normally
+don't touch.
+
+| Setting | Default | Description |
+|---|---|---|
+| `WITH_LAYA` | `1` | Build the image with Laya (PyTorch CPU, ~1 GB larger). `0` for a slim image. Needs `docker compose build`. |
+| `DIGEST_MEM_LIMIT` | `3g` | Memory limit for the digest container. |
+| `DIGEST_CPUS` | `2` | CPU limit for the digest container. |
+| `OLLAMA_MEM_LIMIT` | `6g` | Memory limit for the optional Ollama container. |
+| `HTTP_PORT` | `8080` | Port inside the container. The host port (`127.0.0.1:8087`) is set in `docker-compose.yml`. |
+| `DATA_DIR` | `/data` | State, digests, feed, learning logs and the Laya model (mounted from `./data`). |
+| `CONFIG_DIR` | `/config` | Interest profile, examples and Laya questions (mounted read-only from `./config`). |
 
 ## Operation
 
