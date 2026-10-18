@@ -191,3 +191,15 @@ Kommen zu viele/zu wenige Artikel: `MIN_SCORE` und `TOP_N` anpassen.
   `state.json` = nächster Lauf startet wieder mit den letzten `LOOKBACK_HOURS`.
 - Datenschutz: Titel, Anrisse und Volltexte der Artikel sowie dein Profil gehen an den
   gewählten LLM-Anbieter. Wer das nicht will: Ollama.
+
+## Lizenz
+
+[PolyForm Noncommercial 1.0.0](LICENSE.md): Nutzung, Änderung und Weitergabe sind für
+nicht-kommerzielle Zwecke erlaubt, etwa private Nutzung, Forschung, Bildung und gemeinnützige
+Organisationen. Kommerzielle Nutzung, auch von Teilen des Codes, ist nicht erlaubt. Wer das
+Projekt kommerziell einsetzen möchte, kann beim Urheber nach einer gesonderten Lizenz fragen.
+
+Damit ist feed-digestive *source available*, aber nicht Open Source im Sinne der OSI.
+
+Abhängigkeiten wie httpx, PyTorch und [Laya](https://laya.convaiinnovations.com/) (Apache 2.0)
+stehen unter ihren eigenen Lizenzen und sind nicht Teil dieses Repositorys.
