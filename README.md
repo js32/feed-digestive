@@ -1,6 +1,6 @@
 # feed-digestive
 
-*Eats your RSS feeds, digests them overnight, serves you only the nutritious bits.*
+*Eats your RSS feeds, digests them overnight, serves you only the nutritious bits. Self-hosted, light-weight(s), learns your taste, no tracking but your own.*
 
 Holt täglich die neuen Artikel aus deinem **Miniflux**, lässt sie von einem LLM anhand
 deines Interessenprofils bewerten, schreibt zu den besten einen kurzen Auszug und
