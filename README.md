@@ -179,7 +179,18 @@ Your personal profile lives in `config/`, which is git-ignored. The repo only sh
 - `config/laya_questions.json`: the Laya question catalogue.
 - Starred articles in your reader are added to the profile automatically (`USE_MINIFLUX_STARRED`).
 
-Too many or too few articles? Adjust `MIN_SCORE` and `TOP_N`. `FEED_MODE=items` turns every
+### Which articles are considered
+
+By default (`SELECT_FROM=unread`) every unread article in your reader is a candidate, newest
+first, up to `MAX_ENTRIES` and no older than `UNREAD_MAX_AGE_DAYS`. Articles are scored only
+once: Laya features and LLM scores are cached in `data/history.jsonl` and reused, and anything
+that already appeared in a digest is never shown again. `SELECT_FROM=new` only looks at articles
+that arrived since the last run.
+
+### How many articles
+
+Everything scoring at least `MIN_SCORE` goes in, up to `TOP_N`. If that's fewer than `MIN_ITEMS`,
+the digest is topped up with the next best articles, but never below `FLOOR_SCORE`. `FEED_MODE=items` turns every
 article into its own feed entry instead of one daily digest.
 
 ## Learning from clicks and stars

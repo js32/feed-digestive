@@ -75,18 +75,24 @@ class LayaFilter:
         lab.update({f"penalty_{k}": "Malus " + v.get("label", k) for k, v in self.spec["penalties"].items()})
         return lab
 
+    def feature_keys(self) -> set[str]:
+        return ({f"topic_{t}" for t in self.spec["topics"]} | {"depth"}
+                | {f"penalty_{p}" for p in self.spec["penalties"]})
+
     def combine(self, answers: dict) -> tuple[float, str]:
+        return self.combine_features(self.features(answers))
+
+    def combine_features(self, f: dict) -> tuple[float, str]:
         topics = self.spec["topics"]
         rel_best, rel_id = 0.0, ""
         for tid, t in topics.items():
-            p = float(answers.get(f"topic_{tid}", {}).get("noul", 0.0)) * float(t.get("weight", 1.0))
+            p = float(f.get(f"topic_{tid}", 0.0)) * float(t.get("weight", 1.0))
             if p > rel_best:
                 rel_best, rel_id = p, tid
-        levels = len(self.spec["depth"]["levels"])
-        depth = float(answers.get("depth", {}).get("score", 0.0)) / max(1, levels - 1)
+        depth = float(f.get("depth", 0.0))
         malus, mal_id = 0.0, ""
         for pid in self.spec["penalties"]:
-            p = float(answers.get(f"penalty_{pid}", {}).get("noul", 0.0))
+            p = float(f.get(f"penalty_{pid}", 0.0))
             if p > malus:
                 malus, mal_id = p, pid
         value = 10 * rel_best * (0.4 + 0.6 * depth) * (1 - 0.8 * malus)
@@ -96,7 +102,25 @@ class LayaFilter:
         return round(value, 2), why
 
     def score(self, items: list[dict], learner=None) -> None:
-        """Setzt it['prefilter'] (0–10), it['prefilter_why'] und it['laya_features']."""
+        """Setzt it['prefilter'] (0–10), it['prefilter_why'] und it['laya_features'].
+
+        Artikel mit passenden Merkmalen aus einem früheren Lauf (it['laya_features'] mit
+        denselben Fragen) werden nicht neu durch Laya geschickt."""
+        keys = self.feature_keys()
+        todo = [it for it in items if set((it.get("laya_features") or {}).keys()) != keys]
+        if len(todo) < len(items):
+            log.info("Laya: %d Artikel aus früheren Läufen übernommen, %d neu zu bewerten",
+                     len(items) - len(todo), len(todo))
+        if todo:
+            self._run_laya(todo)
+        for it in items:
+            it["prefilter"], it["prefilter_why"] = self.combine_features(it["laya_features"])
+            if learner is not None and learner.active:
+                formula = it["prefilter"]
+                it["prefilter"] = learner.blend(formula, it["laya_features"])
+                it["prefilter_why"] += f", gelernt {learner.prob(it['laya_features']):.2f} (Formel {formula})"
+
+    def _run_laya(self, items: list[dict]) -> None:
         requests = []
         for it in items:
             req = {"state": self._state(it), "questions": self.questions, "max_len": self.max_len}
@@ -110,13 +134,8 @@ class LayaFilter:
             used[m] = used.get(m, 0) + 1
         log.info("Laya-Modelle: %s", ", ".join(f"{m} {n}×" for m, n in sorted(used.items())))
         for it, res in zip(items, results):
-            answers = res.get("answers", {})
-            it["laya_features"] = self.features(answers)
-            it["prefilter"], it["prefilter_why"] = self.combine(answers)
-            if learner is not None and learner.active:
-                formula = it["prefilter"]
-                it["prefilter"] = learner.blend(formula, it["laya_features"])
-                it["prefilter_why"] += f", gelernt {learner.prob(it['laya_features']):.2f} (Formel {formula})"
+            it["laya_features"] = self.features(res.get("answers", {}))
+            it["_fresh"] = True
 
 
 def load_questions(path: Path) -> dict:

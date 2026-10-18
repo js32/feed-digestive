@@ -244,10 +244,26 @@ def run(s: Settings, dry_run: bool = False) -> dict | None:
     cutoff = window_start - timedelta(hours=s.lookback_hours)  # Puffer für spät einsortierte Artikel
 
     src = make_source(s)
-    raw, source_state = src.fetch_new(state, window_start)
-    log.info("%d neue Einträge aus %s", len(raw), src.name)
+    if s.select_from == "unread":
+        raw, source_state = src.fetch_unread(s.max_entries), {}
+        log.info("%d ungelesene Einträge aus %s", len(raw), src.name)
+        cutoff = (now - timedelta(days=s.unread_max_age_days) if s.unread_max_age_days > 0
+                  else datetime(1970, 1, 1, tzinfo=timezone.utc))
+    else:
+        raw, source_state = src.fetch_new(state, window_start)
+        log.info("%d neue Einträge aus %s", len(raw), src.name)
     items = prepare(raw, s, cutoff)
-    log.info("%d nach Filter/Deduplizierung", len(items))
+
+    # Wissen aus früheren Läufen: schon Gezeigtes raus, Bewertungen wiederverwenden
+    cache = feedback.load_cache(s.data_dir)
+    before = len(items)
+    items = [it for it in items if not cache.get(str(it["id"]), {}).get("shown")]
+    for it in items:
+        c = cache.get(str(it["id"]))
+        if c:
+            it["laya_features"] = c["features"]
+            it["cached_score"] = c["score"]
+    log.info("%d nach Filter/Deduplizierung (%d waren schon im Digest)", len(items), before - len(items))
 
 
     digest = None
@@ -286,8 +302,19 @@ def run(s: Settings, dry_run: bool = False) -> dict | None:
                 it["score_why"] = it.get("prefilter_why", "")
         else:
             scorer = LLM(s.scoring_provider, s.scoring_model)
-            log.info("Bewerte mit %s, Auszüge mit %s", scorer, summarizer)
-            score(items, scorer, profile, s.scoring_batch_size)
+            todo = []
+            for it in items:
+                if it.get("cached_score") is not None:
+                    it["score"] = it["cached_score"]
+                else:
+                    todo.append(it)
+            log.info("Bewerte %d Artikel mit %s (%d aus früheren Läufen), Auszüge mit %s",
+                     len(todo), scorer, len(items) - len(todo), summarizer)
+            if todo:
+                score(todo, scorer, profile, s.scoring_batch_size)
+                for it in todo:
+                    if it.get("score") is not None:
+                        it["_fresh"] = True
         chosen = select(items, max(1, s.top_n - s.explore_slots), s.min_score,
                         s.min_items, s.floor_score)
         # Zufallsfund gegen die Filterblase: ein Artikel knapp unterhalb der Auswahl
@@ -306,7 +333,12 @@ def run(s: Settings, dry_run: bool = False) -> dict | None:
             chosen = list(pool.map(lambda it: summarize(it, summarizer, profile, s.output_language), chosen))
 
         if not dry_run:
-            feedback.log_history(s.data_dir, run_id, all_scored, {it["id"] for it in chosen})
+            # nur neu Bewertetes und Gezeigtes protokollieren – sonst wächst das Protokoll
+            # bei "alle Ungelesenen" jeden Tag um dieselben Artikel
+            shown_ids = {it["id"] for it in chosen}
+            to_log = [it for it in all_scored if it.get("_fresh") or it["id"] in shown_ids
+                      or str(it["id"]) not in cache]
+            feedback.log_history(s.data_dir, run_id, to_log, shown_ids)
 
         local = now.astimezone(ZoneInfo(s.tz))
         digest = {

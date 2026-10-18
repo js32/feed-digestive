@@ -58,6 +58,27 @@ def log_history(data_dir: Path, run_id: str, items: list[dict], shown_ids: set[i
     _append(data_dir / "history.jsonl", rows)
 
 
+def load_cache(data_dir: Path) -> dict[str, dict]:
+    """Bisheriges Wissen je Artikel: zuletzt bekannte Laya-Merkmale, LLM-Wert, schon gezeigt?"""
+    cache: dict[str, dict] = {}
+    for r in read_jsonl(data_dir / "history.jsonl"):
+        c = cache.setdefault(str(r.get("entry_id")), {"features": None, "score": None, "shown": False})
+        if r.get("features"):
+            c["features"] = r["features"]
+        if r.get("score") is not None:
+            c["score"] = r["score"]
+        c["shown"] = c["shown"] or bool(r.get("shown"))
+    try:
+        digests = json.loads((data_dir / "digests.json").read_text(encoding="utf-8"))
+    except (FileNotFoundError, json.JSONDecodeError):
+        digests = []
+    for d in digests:
+        for it in d.get("items", []):
+            if it.get("entry_id") is not None:
+                cache.setdefault(str(it["entry_id"]), {"features": None, "score": None, "shown": False})["shown"] = True
+    return cache
+
+
 def prune(data_dir: Path) -> None:
     """Alte Protokollzeilen entfernen, damit die Dateien nicht endlos wachsen."""
     cutoff = (datetime.now(timezone.utc) - timedelta(days=HISTORY_DAYS)).isoformat()

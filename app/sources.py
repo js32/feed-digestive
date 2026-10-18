@@ -47,6 +47,10 @@ class Source:
         """Mit Stern markierte Einträge (normalisiert)."""
         raise NotImplementedError
 
+    def fetch_unread(self, limit: int) -> list[dict]:
+        """Alle ungelesenen Einträge, neueste zuerst, höchstens limit."""
+        raise NotImplementedError
+
 
 # ----------------------------------------------------------------------
 # Miniflux (native API)
@@ -83,6 +87,21 @@ class MinifluxSource(Source):
         )
         last = max([e["id"] for e in raw], default=state.get("last_entry_id") or 0)
         return [self._norm(e) for e in raw], {"last_entry_id": last}
+
+    def fetch_unread(self, limit):
+        out = []
+        cats = [int(x) for x in self.s.category_ids if str(x).isdigit()] or [None]
+        for cat in cats:
+            offset = 0
+            while len(out) < limit:
+                data = self.mf._get("/entries", status="unread", order="published_at", direction="desc",
+                                    limit=min(100, limit - len(out)), offset=offset, category_id=cat)
+                batch = data.get("entries") or []
+                out.extend(batch)
+                offset += len(batch)
+                if len(batch) < 100:
+                    break
+        return [self._norm(e) for e in out[:limit]]
 
     def starred(self, limit=300):
         try:
@@ -213,6 +232,17 @@ class GReaderSource(Source):
             items = items[-self.s.max_entries:]
         keep = (state.get("greader_seen", []) + fresh_ids)[-SEEN_KEEP:]
         return items, {"greader_since": datetime.now(timezone.utc).isoformat(), "greader_seen": keep}
+
+    def fetch_unread(self, limit):
+        streams = [f"user/-/label/{l}" for l in self.s.greader_labels] or [READING_LIST]
+        seen, out = set(), []
+        for stream in streams:
+            for raw in self._stream(stream, since=None, limit=limit, exclude_read=True, oldest_first=False):
+                e = self._norm(raw)
+                if e["id"] not in seen:
+                    seen.add(e["id"])
+                    out.append(e)
+        return out[:limit]
 
     def starred(self, limit=300):
         try:

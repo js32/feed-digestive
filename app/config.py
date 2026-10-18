@@ -48,6 +48,8 @@ class Settings:
     greader_app_id: str = ""
     greader_app_key: str = ""
     greader_labels: list[str] = field(default_factory=list)
+    select_from: str = "unread"   # unread | new
+    unread_max_age_days: int = 30
     lookback_hours: int = 24
     max_entries: int = 400
     only_unread: bool = False
@@ -123,6 +125,8 @@ class Settings:
             greader_labels=_list("GREADER_LABELS"),
             miniflux_url=(_env("MINIFLUX_URL") or "").rstrip("/"),
             miniflux_token=_env("MINIFLUX_API_TOKEN", "") or "",
+            select_from=(_env("SELECT_FROM", "unread") or "unread").lower(),
+            unread_max_age_days=_int("UNREAD_MAX_AGE_DAYS", 30),
             lookback_hours=_int("LOOKBACK_HOURS", 24),
             max_entries=_int("MAX_ENTRIES", 400),
             only_unread=_bool("ONLY_UNREAD", False),
@@ -180,6 +184,8 @@ class Settings:
                     errors.append(f"{key} fehlt")
         else:
             errors.append("SOURCE muss 'miniflux' oder 'greader' sein")
+        if self.select_from not in ("unread", "new"):
+            errors.append("SELECT_FROM muss 'unread' oder 'new' sein")
         if self.prefilter not in ("none", "laya"):
             errors.append("PREFILTER muss 'none' oder 'laya' sein")
         if self.scoring_provider == "none" and self.prefilter != "laya":
