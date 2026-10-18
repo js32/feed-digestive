@@ -23,7 +23,7 @@ from . import feedback
 from .config import Settings
 from .digest import run
 from .feed import write_feed
-from .llm import LLM
+from .llm import LLM, LLMError
 from .sources import make_source
 
 log = logging.getLogger("feed-digestive")
@@ -143,7 +143,10 @@ def check(s: Settings) -> None:
         if prov == "none":
             continue
         llm = LLM(prov, model)
-        answer = llm.complete("Antworte knapp.", "Sag nur: ok", max_tokens=20)
+        try:
+            answer = llm.complete("Antworte knapp.", "Sag nur: ok", max_tokens=20)
+        except LLMError as e:
+            raise SystemExit(f"✗ {stage}: {e}")
         print(f"✓ {stage}: {llm} antwortet: {answer.strip()[:40]!r}")
     print(f"Feed-URL: {s.feed_url}")
 

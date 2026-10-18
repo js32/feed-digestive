@@ -63,7 +63,10 @@ class LLM:
             except httpx.TransportError as e:
                 last = e
                 time.sleep(2 ** attempt * 3)
-        raise LLMError(f"{self}: aufgegeben nach mehreren Versuchen: {last}")
+        detail = ""
+        if isinstance(last, httpx.HTTPStatusError):
+            detail = f" – Antwort des Anbieters: {last.response.text[:400]}"
+        raise LLMError(f"{self}: aufgegeben nach mehreren Versuchen: {last}{detail}")
 
     def _anthropic(self, system: str, user: str, max_tokens: int) -> str:
         r = self.http.post(
