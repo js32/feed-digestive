@@ -72,6 +72,14 @@ class Miniflux:
             out = sorted(out, key=lambda e: e["id"])[-max_entries:]
         return out
 
+    def starred_entries(self, limit: int = 300) -> list[dict]:
+        try:
+            data = self._get("/entries", starred="true", order="id", direction="desc", limit=limit)
+        except httpx.HTTPError as e:
+            log.warning("Stern-Einträge nicht abrufbar: %s", e)
+            return []
+        return [{"id": e["id"], "url": e.get("url") or ""} for e in data.get("entries") or []]
+
     def starred_titles(self, limit: int = 30) -> list[str]:
         try:
             data = self._get("/entries", starred="true", order="published_at",

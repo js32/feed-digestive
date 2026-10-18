@@ -24,9 +24,17 @@ def _host(url: str) -> str:
     return urlparse(url).netloc.removeprefix("www.")
 
 
-def _item_html(it: dict, with_header: bool = True) -> str:
+def _link(it: dict, s: Settings | None) -> str:
+    """Link auf den Artikel – mit Klick-Zähler über den eigenen Server, wenn aktiv."""
+    if s is not None and s.track_clicks and it.get("entry_id"):
+        from .feedback import tracked_url
+        return tracked_url(s.feed_base, it["entry_id"])
+    return it.get("url") or ""
+
+
+def _item_html(it: dict, with_header: bool = True, s: Settings | None = None) -> str:
     title = escape(it.get("digest_title") or it.get("title") or "")
-    url = escape(it.get("url") or "", quote=True)
+    url = escape(_link(it, s), quote=True)
     meta = " · ".join(x for x in (
         escape(it.get("feed") or _host(it.get("url") or "")),
         f"{it['reading_time']} min" if it.get("reading_time") else "",
@@ -35,6 +43,8 @@ def _item_html(it: dict, with_header: bool = True) -> str:
     orig = it.get("title") or ""
     orig_html = (f'<br><small>Original: „{escape(orig)}“</small>'
                  if orig and orig != it.get("digest_title") else "")
+    if it.get("explore"):
+        title = "🎲 Zufallsfund: " + title
     head = f'<h3><a href="{url}">{title}</a></h3>' if with_header else ""
     why = f'<p><em>Warum lesen: {escape(it["why"])}</em></p>' if it.get("why") else ""
     return (f'{head}<p><small>{meta}</small>{orig_html}</p>'
@@ -42,12 +52,12 @@ def _item_html(it: dict, with_header: bool = True) -> str:
             f'<p><a href="{url}">→ Zum Artikel</a></p>')
 
 
-def _digest_html(d: dict) -> str:
+def _digest_html(d: dict, s: Settings | None = None) -> str:
     toc = "".join(
-        f'<li><a href="{escape(it["url"], quote=True)}">{escape(it.get("digest_title") or it["title"])}</a></li>'
+        f'<li><a href="{escape(_link(it, s), quote=True)}">{escape(it.get("digest_title") or it["title"])}</a></li>'
         for it in d["items"]
     )
-    body = "<hr>".join(_item_html(it) for it in d["items"])
+    body = "<hr>".join(_item_html(it, s=s) for it in d["items"])
     return (f"<p>{len(d['items'])} von {d.get('considered', '?')} neuen Artikeln ausgewählt.</p>"
             f"<ol>{toc}</ol><hr>{body}")
 
@@ -75,8 +85,9 @@ def write_feed(s: Settings, digests: list[dict]) -> None:
             _el(e, "id", _uid(s.feed_url, d["id"]))
             _el(e, "updated", d["generated_at"])
             _el(e, "published", d["generated_at"])
-            _el(e, "link", rel="alternate", href=d["items"][0]["url"] if d["items"] else s.feed_url)
-            _el(e, "content", _digest_html(d), type="html")
+            # bewusst kein Artikel-Link: sonst zählt ein Crawler-Abruf als Klick
+            _el(e, "link", rel="alternate", href=s.feed_url)
+            _el(e, "content", _digest_html(d, s), type="html")
         else:
             for it in d["items"]:
                 e = _el(root, "entry")
@@ -84,11 +95,11 @@ def write_feed(s: Settings, digests: list[dict]) -> None:
                 _el(e, "id", _uid(s.feed_url, it["url"]))
                 _el(e, "updated", d["generated_at"])
                 _el(e, "published", d["generated_at"])
-                _el(e, "link", rel="alternate", href=it["url"])
+                _el(e, "link", rel="alternate", href=_link(it, s))
                 a = _el(e, "author")
                 _el(a, "name", it.get("feed") or _host(it["url"]))
                 _el(e, "summary", it.get("excerpt") or "")
-                _el(e, "content", _item_html(it, with_header=False), type="html")
+                _el(e, "content", _item_html(it, with_header=False, s=s), type="html")
 
     out = s.data_dir / "feed.xml"
     out.parent.mkdir(parents=True, exist_ok=True)

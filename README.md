@@ -115,6 +115,38 @@ Varianten:
 - **Nur Laya**: `SCORING_PROVIDER=none`, `MIN_SCORE=4` – die Bewertung kostet nichts, nur
   die Auszüge gehen noch an ein LLM (oder an Ollama lokal → komplett ohne Cloud).
 
+## Lernen aus Klicks und Sternen
+
+Der Digest merkt sich, was du liest, und passt die Laya-Bewertung daran an.
+Alles bleibt auf deinem Server.
+
+**Was gesammelt wird** (in `data/`, 180 Tage):
+- `history.jsonl`: jeder bewertete Artikel mit den Laya-Antworten und ob er im Digest stand
+- `feedback.jsonl`: Klicks und Sterne
+
+**Rückmeldung:**
+- **Klicks**: Die Links im Digest zeigen auf `rss.js32.de/<token>/r/<id>`. Die App zählt den
+  Klick und leitet sofort weiter. Abrufe von Miniflux-Crawler, Vorschau-Bots und Skripten
+  zählen nicht. Das Ziel sieht weder den geheimen Pfad (`Referrer-Policy: no-referrer`) noch
+  dass du über den Digest kamst.
+- **Sterne**: Sterne in Miniflux, sowohl auf Original-Artikeln als auch auf Digest-Einträgen,
+  holt die App bei jedem Lauf per API ab.
+
+**Lernen:** Ein kleines Regressionsmodell lernt aus den Laya-Antworten, was du anklickst.
+Es startet ab 5 positiven und 10 negativen Rückmeldungen. Sein Anteil am Wert wächst mit der
+Zahl der Klicks und Sterne auf höchstens 80 %, den Rest liefert weiterhin die Formel mit
+deinen Gewichten. Ein gezeigter Artikel zählt erst nach `FEEDBACK_DAYS` ohne Klick als negativ.
+
+```bash
+docker compose exec digest python -m app learn   # was hat es gelernt?
+```
+
+**Filterblase:** Pro Digest ist ein Platz (`EXPLORE_SLOTS`) ein 🎲 Zufallsfund knapp
+unterhalb der Auswahl. So bekommen auch Themen, die das Modell gerade unterschätzt, eine
+Chance auf deine Klicks.
+
+Ohne Laya werden Klicks und Sterne trotzdem gesammelt. Gelernt wird erst, wenn Laya aktiv ist.
+
 ## Interessenprofil anpassen
 
 Das persönliche Profil liegt in `config/` und ist per `.gitignore` vom Repo

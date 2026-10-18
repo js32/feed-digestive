@@ -61,6 +61,11 @@ class Settings:
     laya_model: str = "multilingual"
     laya_max_len: int = 1024
     laya_batch_size: int = 8
+    # Rückmeldung / Lernen
+    track_clicks: bool = True
+    learn: bool = True
+    feedback_days: int = 3
+    explore_slots: int = 1
     examples_in_prompt: int = 120
 
     # Auswahl / Ausgabe
@@ -88,6 +93,11 @@ class Settings:
         return f"/{self.feed_token}/feed.xml" if self.feed_token else "/feed.xml"
 
     @property
+    def feed_base(self) -> str:
+        """Öffentliche Basis-URL inkl. geheimem Pfad, z. B. https://rss.js32.de/<token>"""
+        return self.public_url.rstrip("/") + (f"/{self.feed_token}" if self.feed_token else "")
+
+    @property
     def feed_url(self) -> str:
         return self.public_url.rstrip("/") + self.feed_path
 
@@ -113,6 +123,10 @@ class Settings:
             laya_model=_env("LAYA_MODEL", "multilingual") or "multilingual",
             laya_max_len=_int("LAYA_MAX_LEN", 1024),
             laya_batch_size=_int("LAYA_BATCH_SIZE", 8),
+            track_clicks=_bool("TRACK_CLICKS", True),
+            learn=_bool("LEARN", True),
+            feedback_days=_int("FEEDBACK_DAYS", 3),
+            explore_slots=_int("EXPLORE_SLOTS", 1),
             examples_in_prompt=_int("EXAMPLES_IN_PROMPT", 120),
             top_n=_int("TOP_N", 10),
             min_score=_int("MIN_SCORE", 6),

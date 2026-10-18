@@ -56,6 +56,23 @@ class LayaFilter:
         return (f"Source: {it['feed']}\nTitle: {it['title']}\n\n"
                 f"{it['text'][:STATE_CHARS]}")
 
+    def features(self, answers: dict) -> dict:
+        """Laya-Antworten als Zahlen 0–1 – Grundlage fürs Lernen."""
+        f = {}
+        for tid in self.spec["topics"]:
+            f[f"topic_{tid}"] = round(float(answers.get(f"topic_{tid}", {}).get("noul", 0.0)), 4)
+        levels = len(self.spec["depth"]["levels"])
+        f["depth"] = round(float(answers.get("depth", {}).get("score", 0.0)) / max(1, levels - 1), 4)
+        for pid in self.spec["penalties"]:
+            f[f"penalty_{pid}"] = round(float(answers.get(f"penalty_{pid}", {}).get("noul", 0.0)), 4)
+        return f
+
+    def labels(self) -> dict:
+        lab = {f"topic_{k}": "Thema " + v.get("label", k) for k, v in self.spec["topics"].items()}
+        lab["depth"] = "Tiefe"
+        lab.update({f"penalty_{k}": "Malus " + v.get("label", k) for k, v in self.spec["penalties"].items()})
+        return lab
+
     def combine(self, answers: dict) -> tuple[float, str]:
         topics = self.spec["topics"]
         rel_best, rel_id = 0.0, ""
@@ -76,13 +93,19 @@ class LayaFilter:
             why += f", Malus: {self.spec['penalties'][mal_id].get('label', mal_id)}"
         return round(value, 2), why
 
-    def score(self, items: list[dict]) -> None:
-        """Setzt it['prefilter'] (0–10) und it['prefilter_why'] für jeden Artikel."""
+    def score(self, items: list[dict], learner=None) -> None:
+        """Setzt it['prefilter'] (0–10), it['prefilter_why'] und it['laya_features']."""
         requests = [{"state": self._state(it), "questions": self.questions,
                      "model": self.model, "max_len": self.max_len} for it in items]
         results = self.router.predict_batch(requests, batch_size=self.batch_size, sort_by_length=True)
         for it, res in zip(items, results):
-            it["prefilter"], it["prefilter_why"] = self.combine(res.get("answers", {}))
+            answers = res.get("answers", {})
+            it["laya_features"] = self.features(answers)
+            it["prefilter"], it["prefilter_why"] = self.combine(answers)
+            if learner is not None and learner.active:
+                formula = it["prefilter"]
+                it["prefilter"] = learner.blend(formula, it["laya_features"])
+                it["prefilter_why"] += f", gelernt {learner.prob(it['laya_features']):.2f} (Formel {formula})"
 
 
 def load_questions(path: Path) -> dict:
@@ -97,8 +120,9 @@ def load_questions(path: Path) -> dict:
     return spec
 
 
-def apply_prefilter(items: list[dict], flt: LayaFilter, keep: int, min_value: float) -> list[dict]:
-    flt.score(items)
+def apply_prefilter(items: list[dict], flt: LayaFilter, keep: int, min_value: float,
+                    learner=None) -> list[dict]:
+    flt.score(items, learner)
     ranked = sorted(items, key=lambda it: -it["prefilter"])
     kept = [it for it in ranked if it["prefilter"] >= min_value][:keep]
     log.info("Laya-Vorfilter: %d von %d Artikeln behalten (bester Wert %.1f, Schwelle %.1f)",

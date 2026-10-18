@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import json
 import logging
+import random
 import re
 import urllib.parse
 from concurrent.futures import ThreadPoolExecutor
@@ -10,6 +11,7 @@ from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from zoneinfo import ZoneInfo
 
+from . import feedback
 from .config import Settings
 from .feed import write_feed
 from .llm import LLM, LLMError
@@ -235,6 +237,13 @@ def run(s: Settings, dry_run: bool = False) -> dict | None:
     digest = None
     if items:
         considered = len(items)
+        run_id = now.strftime("%Y%m%dT%H%M%S")
+        if not dry_run:
+            feedback.collect_stars(s.data_dir, mf.starred_entries())
+        learner = None
+        if s.prefilter == "laya" and s.learn:
+            from .learn import retrain
+            learner = retrain(s.data_dir, s.feedback_days)
         starred = mf.starred_titles() if s.use_starred else []
         profile = build_profile(s, starred)
         summarizer = LLM(s.summary_provider, s.summary_model)
@@ -244,7 +253,10 @@ def run(s: Settings, dry_run: bool = False) -> dict | None:
             from .laya_filter import LayaFilter, apply_prefilter
             flt = LayaFilter(s.config_dir / "laya_questions.json", model=s.laya_model,
                              max_len=s.laya_max_len, batch_size=s.laya_batch_size)
-            items = apply_prefilter(items, flt, s.prefilter_keep, s.prefilter_min)
+            all_scored = items  # fürs Protokoll: auch Aussortierte (können später einen Stern bekommen)
+            items = apply_prefilter(items, flt, s.prefilter_keep, s.prefilter_min, learner)
+        else:
+            all_scored = items
 
         # Stufe 1: Bewertung per LLM – oder direkt den Laya-Wert übernehmen
         if s.scoring_provider == "none":
@@ -256,21 +268,33 @@ def run(s: Settings, dry_run: bool = False) -> dict | None:
             scorer = LLM(s.scoring_provider, s.scoring_model)
             log.info("Bewerte mit %s, Auszüge mit %s", scorer, summarizer)
             score(items, scorer, profile, s.scoring_batch_size)
-        chosen = select(items, s.top_n, s.min_score)
-        log.info("%d Artikel ausgewählt", len(chosen))
+        chosen = select(items, max(1, s.top_n - s.explore_slots), s.min_score)
+        # Zufallsfund gegen die Filterblase: ein Artikel knapp unterhalb der Auswahl
+        if s.explore_slots > 0:
+            picked = {it["id"] for it in chosen}
+            pool = [it for it in sorted(all_scored, key=lambda it: -(it.get("score") or it.get("prefilter") or 0))
+                    if it["id"] not in picked][:30]
+            for it in random.sample(pool, min(s.explore_slots, len(pool))):
+                it["explore"] = True
+                chosen.append(it)
+        log.info("%d Artikel ausgewählt (davon %d Zufallsfund)", len(chosen), sum(1 for it in chosen if it.get("explore")))
 
         with ThreadPoolExecutor(max_workers=4) as pool:
             chosen = list(pool.map(lambda it: summarize(it, summarizer, profile, s.output_language), chosen))
 
+        if not dry_run:
+            feedback.log_history(s.data_dir, run_id, all_scored, {it["id"] for it in chosen})
+
         local = now.astimezone(ZoneInfo(s.tz))
         digest = {
-            "id": now.strftime("%Y%m%dT%H%M%S"),
+            "id": run_id,
             "date": local.strftime("%d.%m.%Y"),
             "generated_at": now.isoformat(),
             "considered": considered,
             "items": [
-                {k: it.get(k) for k in ("digest_title", "title", "url", "feed", "author", "published",
-                                        "score", "excerpt", "why", "reading_time")}
+                {"entry_id": it["id"], **{k: it.get(k) for k in (
+                    "digest_title", "title", "url", "feed", "author", "published",
+                    "score", "excerpt", "why", "reading_time", "explore")}}
                 for it in chosen
             ],
         }
@@ -287,5 +311,6 @@ def run(s: Settings, dry_run: bool = False) -> dict | None:
     _save(digests_path, digests)
     write_feed(s, digests)
     _save(state_path, {"last_entry_id": max_id, "last_run": now.isoformat()})
+    feedback.prune(s.data_dir)
     log.info("Feed aktualisiert: %s", s.feed_url)
     return digest

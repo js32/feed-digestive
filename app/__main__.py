@@ -4,10 +4,12 @@
   python -m app run       einmal ausführen und Feed aktualisieren
   python -m app dry-run   einmal ausführen, Ergebnis nur anzeigen (nichts speichern)
   python -m app check     Verbindung zu Miniflux und LLMs testen
+  python -m app learn     zeigen, was aus Klicks und Sternen gelernt wurde
 """
 from __future__ import annotations
 
 import logging
+import re
 import sys
 import threading
 import time
@@ -15,6 +17,7 @@ from datetime import datetime, timedelta
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from zoneinfo import ZoneInfo
 
+from . import feedback
 from .config import Settings
 from .digest import run
 from .feed import write_feed
@@ -51,6 +54,8 @@ def _next_run(s: Settings) -> datetime:
 
 def _make_handler(s: Settings):
     feed_file = s.data_dir / "feed.xml"
+    prefix = f"/{s.feed_token}" if s.feed_token else ""
+    redirect_re = re.compile(rf"^{re.escape(prefix)}/r/(\d+)$")
 
     class Handler(BaseHTTPRequestHandler):
         server_version = "rss-digest"
@@ -61,9 +66,26 @@ def _make_handler(s: Settings):
                 return self._send(200, b"ok", "text/plain")
             if path == s.feed_path and feed_file.exists():
                 return self._send(200, feed_file.read_bytes(), "application/atom+xml; charset=utf-8")
+            m = redirect_re.match(path)
+            if m:
+                entry_id = int(m.group(1))
+                target = feedback.lookup_url(s.data_dir, entry_id)
+                if not target:
+                    return self._send(404, b"unbekannter Artikel", "text/plain; charset=utf-8")
+                if self.command == "GET" and feedback.is_human(self.headers.get("User-Agent")):
+                    feedback.record_click(s.data_dir, entry_id)
+                return self._redirect(target)
             return self._send(404, b"not found", "text/plain")
 
         do_HEAD = do_GET
+
+        def _redirect(self, target):
+            self.send_response(302)
+            self.send_header("Location", target)
+            self.send_header("Cache-Control", "no-store")
+            self.send_header("Referrer-Policy", "no-referrer")  # Ziel sieht den geheimen Pfad nicht
+            self.send_header("Content-Length", "0")
+            self.end_headers()
 
         def _send(self, code, body, ctype):
             self.send_response(code)
@@ -130,6 +152,17 @@ def main() -> None:
         run(s, dry_run=True)
     elif cmd == "check":
         check(s)
+    elif cmd == "learn":
+        from .learn import describe
+        labels = {}
+        qfile = s.config_dir / "laya_questions.json"
+        if qfile.exists():
+            import json
+            spec = json.loads(qfile.read_text(encoding="utf-8"))
+            labels = {f"topic_{k}": "Thema " + v.get("label", k) for k, v in spec.get("topics", {}).items()}
+            labels["depth"] = "Tiefe"
+            labels.update({f"penalty_{k}": "Malus " + v.get("label", k) for k, v in spec.get("penalties", {}).items()})
+        print(describe(s.data_dir, s.feedback_days, labels))
     else:
         print(__doc__)
         sys.exit(2)
