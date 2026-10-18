@@ -5,6 +5,7 @@ import json
 import logging
 import os
 import re
+import threading
 import time
 
 import httpx
@@ -16,6 +17,24 @@ log = logging.getLogger(__name__)
 
 class LLMError(RuntimeError):
     pass
+
+
+# Gemeinsame Drossel pro Anbieter (gilt über Threads und LLM-Instanzen hinweg),
+# z. B. für Gratis-Tarife mit ~2 Anfragen/Minute: LLM_MIN_INTERVAL=31
+_throttle_lock = threading.Lock()
+_last_call: dict[str, float] = {}
+
+
+def _throttle(provider: str) -> None:
+    interval = float(os.environ.get("LLM_MIN_INTERVAL", "0") or 0)
+    if interval <= 0:
+        return
+    with _throttle_lock:
+        wait = _last_call.get(provider, 0) + interval - time.monotonic()
+        if wait > 0:
+            log.info("%s: warte %.0fs (LLM_MIN_INTERVAL)", provider, wait)
+            time.sleep(wait)
+        _last_call[provider] = time.monotonic()
 
 
 class LLM:
@@ -47,6 +66,7 @@ class LLM:
     def complete(self, system: str, user: str, max_tokens: int = 2000, json_mode: bool = False) -> str:
         last: Exception | None = None
         for attempt in range(5):
+            _throttle(self.provider)
             try:
                 if self.provider == "anthropic":
                     return self._anthropic(system, user, max_tokens)
@@ -56,6 +76,9 @@ class LLM:
                 last = e
                 if code in (429, 500, 502, 503, 504, 529):
                     wait = min(60, 2 ** attempt * 3)
+                    retry_after = e.response.headers.get("retry-after", "")
+                    if retry_after.isdigit():  # Vorgabe des Anbieters respektieren
+                        wait = min(120, max(wait, int(retry_after)))
                     log.warning("%s: HTTP %s, neuer Versuch in %ss", self, code, wait)
                     time.sleep(wait)
                     continue

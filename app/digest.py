@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import json
 import logging
+import os
 import random
 import re
 import urllib.parse
@@ -276,7 +277,8 @@ def run(s: Settings, dry_run: bool = False) -> dict | None:
                 chosen.append(it)
         log.info("%d Artikel ausgewählt (davon %d Zufallsfund)", len(chosen), sum(1 for it in chosen if it.get("explore")))
 
-        with ThreadPoolExecutor(max_workers=4) as pool:
+        workers = max(1, int(os.environ.get("SUMMARY_PARALLEL", "4") or 4))
+        with ThreadPoolExecutor(max_workers=workers) as pool:
             chosen = list(pool.map(lambda it: summarize(it, summarizer, profile, s.output_language), chosen))
 
         if not dry_run:
