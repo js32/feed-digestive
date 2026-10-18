@@ -1,4 +1,4 @@
-"""Rückmeldung sammeln: Bewertungs-Protokoll, Klicks im Digest, Sterne in Miniflux.
+"""Rückmeldung sammeln: Bewertungs-Protokoll, Klicks im Digest, Sterne im Feedreader.
 
 Alles liegt lokal in data/:
   history.jsonl   ein Eintrag pro bewertetem Artikel und Lauf (Merkmale, Werte, gezeigt ja/nein)
@@ -19,7 +19,8 @@ _write_lock = threading.Lock()
 # Abrufe, die kein Mensch sind: Miniflux-Crawler, Link-Vorschauen, Skripte
 BOT_RE = re.compile(r"miniflux|bot|crawl|spider|preview|curl|wget|python|httpx|feedparser|fetch|okhttp|go-http",
                     re.I)
-TRACK_RE = re.compile(r"/r/(\d+)(?:$|[?#])")
+TRACK_RE = re.compile(r"/r/([A-Za-z0-9_-]+)(?:$|[?#])")
+ID_RE = re.compile(r"^[A-Za-z0-9_-]{1,64}$")
 HISTORY_DAYS = 180
 
 
@@ -50,9 +51,9 @@ def read_jsonl(path: Path) -> list[dict]:
 def log_history(data_dir: Path, run_id: str, items: list[dict], shown_ids: set[int]) -> None:
     now = datetime.now(timezone.utc).isoformat()
     rows = [{
-        "run": run_id, "ts": now, "entry_id": it["id"], "url": it["url"], "title": it["title"],
+        "run": run_id, "ts": now, "entry_id": str(it["id"]), "url": it["url"], "title": it["title"],
         "feed": it["feed"], "features": it.get("laya_features"), "prefilter": it.get("prefilter"),
-        "score": it.get("score"), "shown": it["id"] in shown_ids,
+        "score": it.get("score"), "shown": str(it["id"]) in {str(x) for x in shown_ids},
     } for it in items]
     _append(data_dir / "history.jsonl", rows)
 
@@ -74,7 +75,7 @@ def prune(data_dir: Path) -> None:
 # ----------------------------------------------------------------------
 # Klicks
 # ----------------------------------------------------------------------
-def tracked_url(feed_base: str, entry_id: int) -> str:
+def tracked_url(feed_base: str, entry_id) -> str:
     return f"{feed_base}/r/{entry_id}"
 
 
@@ -82,12 +83,12 @@ def is_human(user_agent: str | None) -> bool:
     return bool(user_agent) and not BOT_RE.search(user_agent)
 
 
-def record_click(data_dir: Path, entry_id: int) -> None:
+def record_click(data_dir: Path, entry_id: str) -> None:
     _append(data_dir / "feedback.jsonl", [{
         "ts": datetime.now(timezone.utc).isoformat(), "entry_id": entry_id, "kind": "click"}])
 
 
-def lookup_url(data_dir: Path, entry_id: int) -> str | None:
+def lookup_url(data_dir: Path, entry_id: str) -> str | None:
     """Nur IDs, die die App selbst ausgeliefert hat – kein offener Redirect."""
     try:
         digests = json.loads((data_dir / "digests.json").read_text(encoding="utf-8"))
@@ -95,36 +96,36 @@ def lookup_url(data_dir: Path, entry_id: int) -> str | None:
         digests = []
     for d in digests:
         for it in d.get("items", []):
-            if it.get("entry_id") == entry_id:
+            if str(it.get("entry_id")) == entry_id:
                 return it.get("url")
     for r in reversed(read_jsonl(data_dir / "history.jsonl")):
-        if r.get("entry_id") == entry_id and r.get("shown"):
+        if str(r.get("entry_id")) == entry_id and r.get("shown"):
             return r.get("url")
     return None
 
 
 # ----------------------------------------------------------------------
-# Sterne aus Miniflux
+# Sterne aus dem Feedreader
 # ----------------------------------------------------------------------
 def collect_stars(data_dir: Path, starred_entries: list[dict]) -> int:
     """Neue Sterne in feedback.jsonl übernehmen.
 
-    Gezählt werden Sterne auf Original-Artikeln (gleiche Miniflux-ID wie im Protokoll) und
+    Gezählt werden Sterne auf Original-Artikeln (gleiche Quell-ID wie im Protokoll) und
     auf Einträgen des Digest-Feeds selbst (ID steckt im /r/<id>-Link).
     """
-    known = {r["entry_id"] for r in read_jsonl(data_dir / "feedback.jsonl") if r.get("kind") == "star"}
+    known = {str(r["entry_id"]) for r in read_jsonl(data_dir / "feedback.jsonl") if r.get("kind") == "star"}
     now = datetime.now(timezone.utc).isoformat()
     new = []
     for e in starred_entries:
-        ids = {e.get("id")}
+        ids = {str(e.get("id") or "")}
         m = TRACK_RE.search(e.get("url") or "")
         if m:
-            ids = {int(m.group(1))}
+            ids = {m.group(1)}
         for eid in ids:
             if eid and eid not in known:
                 known.add(eid)
                 new.append({"ts": now, "entry_id": eid, "kind": "star"})
     _append(data_dir / "feedback.jsonl", new)
     if new:
-        log.info("%d neue Sterne aus Miniflux übernommen", len(new))
+        log.info("%d neue Sterne übernommen", len(new))
     return len(new)

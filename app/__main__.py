@@ -3,7 +3,7 @@
   python -m app serve     Webserver + täglicher Lauf (Standard im Container)
   python -m app run       einmal ausführen und Feed aktualisieren
   python -m app dry-run   einmal ausführen, Ergebnis nur anzeigen (nichts speichern)
-  python -m app check     Verbindung zu Miniflux und LLMs testen
+  python -m app check     Verbindung zu Feedreader und LLMs testen
   python -m app learn     zeigen, was aus Klicks und Sternen gelernt wurde
 """
 from __future__ import annotations
@@ -22,7 +22,7 @@ from .config import Settings
 from .digest import run
 from .feed import write_feed
 from .llm import LLM
-from .miniflux import Miniflux
+from .sources import make_source
 
 log = logging.getLogger("rss-digest")
 _lock = threading.Lock()
@@ -55,7 +55,7 @@ def _next_run(s: Settings) -> datetime:
 def _make_handler(s: Settings):
     feed_file = s.data_dir / "feed.xml"
     prefix = f"/{s.feed_token}" if s.feed_token else ""
-    redirect_re = re.compile(rf"^{re.escape(prefix)}/r/(\d+)$")
+    redirect_re = re.compile(rf"^{re.escape(prefix)}/r/([A-Za-z0-9_-]{{1,64}})$")
 
     class Handler(BaseHTTPRequestHandler):
         server_version = "rss-digest"
@@ -68,7 +68,7 @@ def _make_handler(s: Settings):
                 return self._send(200, feed_file.read_bytes(), "application/atom+xml; charset=utf-8")
             m = redirect_re.match(path)
             if m:
-                entry_id = int(m.group(1))
+                entry_id = m.group(1)
                 target = feedback.lookup_url(s.data_dir, entry_id)
                 if not target:
                     return self._send(404, b"unbekannter Artikel", "text/plain; charset=utf-8")
@@ -119,8 +119,8 @@ def serve(s: Settings) -> None:
 
 
 def check(s: Settings) -> None:
-    me = Miniflux(s.miniflux_url, s.miniflux_token).me()
-    print(f"✓ Miniflux: angemeldet als {me.get('username')}")
+    src = make_source(s)
+    print(f"✓ {src.name}: angemeldet als {src.check()}")
     if s.prefilter == "laya":
         from .laya_filter import LayaFilter
         flt = LayaFilter(s.config_dir / "laya_questions.json", model=s.laya_model,

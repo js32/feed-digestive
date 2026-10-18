@@ -34,13 +34,13 @@ LR = 0.5
 def build_dataset(data_dir: Path, feedback_days: int) -> tuple[list[dict], list[int], list[float], dict]:
     history = [r for r in read_jsonl(data_dir / "history.jsonl") if r.get("features")]
     fb = read_jsonl(data_dir / "feedback.jsonl")
-    positive = {r["entry_id"] for r in fb}
+    positive = {str(r["entry_id"]) for r in fb}
     settle = (datetime.now(timezone.utc) - timedelta(days=feedback_days)).isoformat()
 
     # pro Artikel nur der jüngste Protokolleintrag
     latest: dict[int, dict] = {}
     for r in history:
-        latest[r["entry_id"]] = r
+        latest[str(r["entry_id"])] = r
     X, y, w = [], [], []
     stats = {"pos": 0, "neg_shown": 0, "neg_unshown": 0}
     for eid, r in latest.items():

@@ -42,6 +42,24 @@ Miniflux-API ──► Filter/Dedupe ──► Bewertung (günstiges Modell, all
 5. **Abonnieren**: `https://rss.js32.de/<FEED_TOKEN>/feed.xml` in Miniflux hinzufügen.
    Der eigene Digest-Feed wird automatisch nicht erneut ausgewertet.
 
+## Quellen
+
+| `SOURCE` | Dienste | Anmeldung |
+|---|---|---|
+| `miniflux` | Miniflux (native API) | `MINIFLUX_URL`, `MINIFLUX_API_TOKEN` |
+| `greader` | alle mit Google-Reader-API: FreshRSS, Inoreader, The Old Reader, BazQux, Miniflux, Tiny Tiny RSS / Nextcloud News (mit Plugin) | `GREADER_URL`, `GREADER_USER`, `GREADER_PASSWORD` |
+
+Beispiele für `GREADER_URL`:
+- FreshRSS: `https://freshrss.example.de/api/greader.php`. API-Zugang in den Einstellungen
+  aktivieren und im Profil ein eigenes API-Passwort setzen.
+- Miniflux: `https://miniflux.example.de`. Google-Reader-Integration in den Einstellungen aktivieren.
+- Inoreader: `https://www.inoreader.com`, zusätzlich `GREADER_APP_ID`/`GREADER_APP_KEY` aus
+  einem Inoreader-Entwicklerkonto.
+
+Mit `GREADER_LABELS=Tech,Wissenschaft` werden nur diese Ordner gelesen. Sterne, Klicks und
+Lernen funktionieren mit beiden Quellen gleich. Wer die Quelle wechselt, sollte `data/state.json`
+löschen, weil sich die Artikel-IDs ändern.
+
 ## LLM-Anbieter
 
 Zwei Stufen, getrennt konfigurierbar (`SCORING_*` und `SUMMARY_*`):

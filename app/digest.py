@@ -15,7 +15,8 @@ from . import feedback
 from .config import Settings
 from .feed import write_feed
 from .llm import LLM, LLMError
-from .miniflux import Miniflux, html_to_text, parse_time
+from .miniflux import html_to_text, parse_time
+from .sources import make_source
 
 log = logging.getLogger(__name__)
 
@@ -56,7 +57,7 @@ def build_profile(s: Settings, starred: list[str]) -> str:
         lines = [l for l in examples.read_text(encoding="utf-8").splitlines() if l and not l.startswith("#")]
         parts.append("## Beispiele: Artikel, die der Leser gespeichert hat\n" + "\n".join(lines[: s.examples_in_prompt]))
     if starred:
-        parts.append("## Zuletzt in Miniflux mit Stern markiert\n" + "\n".join(starred))
+        parts.append("## Zuletzt mit Stern markiert\n" + "\n".join(starred))
     return "\n\n".join(parts)
 
 
@@ -111,12 +112,11 @@ def prepare(entries: list[dict], s: Settings, cutoff: datetime) -> list[dict]:
     own_host = urllib.parse.urlparse(s.public_url).netloc
     seen_urls, seen_titles, out = set(), set(), []
     for e in entries:
-        feed = e.get("feed") or {}
         if e.get("feed_id") in s.exclude_feed_ids:
             continue
-        if own_host and own_host in (feed.get("feed_url") or ""):
+        if own_host and own_host in (e.get("feed_url") or ""):
             continue  # eigenen Digest-Feed nicht erneut verdauen
-        pub = parse_time(e.get("published_at")) or parse_time(e.get("created_at"))
+        pub = parse_time(e.get("published_at"))
         if pub and pub < cutoff:
             continue
         url = e.get("url") or ""
@@ -130,7 +130,7 @@ def prepare(entries: list[dict], s: Settings, cutoff: datetime) -> list[dict]:
             "id": e["id"],
             "title": (e.get("title") or "(ohne Titel)").strip(),
             "url": url,
-            "feed": feed.get("title") or "",
+            "feed": e.get("feed_title") or "",
             "feed_id": e.get("feed_id"),
             "author": e.get("author") or "",
             "published": (pub or datetime.now(timezone.utc)).isoformat(),
@@ -144,10 +144,11 @@ def score(items: list[dict], llm: LLM, profile: str, batch_size: int) -> None:
     system = SCORING_SYSTEM.format(profile=profile)
     for i in range(0, len(items), batch_size):
         batch = items[i:i + batch_size]
+        # kurze laufende Nummern statt Quell-IDs: LLMs schreiben lange Hex-IDs gern falsch ab
         listing = "\n\n".join(
-            f"id: {it['id']}\nquelle: {it['feed']}\ntitel: {it['title']}\n"
+            f"id: {n}\nquelle: {it['feed']}\ntitel: {it['title']}\n"
             f"anriss: {it['text'][:SNIPPET_CHARS]}"
-            for it in batch
+            for n, it in enumerate(batch, 1)
         )
         try:
             result = llm.complete_json(system, f"Bewerte diese {len(batch)} Artikel:\n\n{listing}",
@@ -163,8 +164,8 @@ def score(items: list[dict], llm: LLM, profile: str, batch_size: int) -> None:
                 by_id[int(r["id"])] = r
             except (KeyError, TypeError, ValueError):
                 continue
-        for it in batch:
-            r = by_id.get(it["id"])
+        for n, it in enumerate(batch, 1):
+            r = by_id.get(n)
             if not r:
                 continue
             try:
@@ -220,31 +221,27 @@ def run(s: Settings, dry_run: bool = False) -> dict | None:
     window_start = min(last_run, now - timedelta(hours=s.lookback_hours)) if last_run else now - timedelta(hours=s.lookback_hours)
     cutoff = window_start - timedelta(hours=s.lookback_hours)  # Puffer für spät einsortierte Artikel
 
-    mf = Miniflux(s.miniflux_url, s.miniflux_token)
-    raw = mf.entries_since(
-        after_entry_id=state.get("last_entry_id"),
-        after_ts=int(window_start.timestamp()),
-        max_entries=s.max_entries,
-        only_unread=s.only_unread,
-        category_ids=s.category_ids,
-    )
-    log.info("%d neue Einträge aus Miniflux", len(raw))
+    src = make_source(s)
+    raw, source_state = src.fetch_new(state, window_start)
+    log.info("%d neue Einträge aus %s", len(raw), src.name)
     items = prepare(raw, s, cutoff)
     log.info("%d nach Filter/Deduplizierung", len(items))
 
-    max_id = max([e["id"] for e in raw], default=state.get("last_entry_id") or 0)
 
     digest = None
     if items:
         considered = len(items)
         run_id = now.strftime("%Y%m%dT%H%M%S")
         if not dry_run:
-            feedback.collect_stars(s.data_dir, mf.starred_entries())
+            starred_entries = src.starred() if (s.use_starred or s.learn) else []
+            feedback.collect_stars(s.data_dir, starred_entries)
+        else:
+            starred_entries = src.starred() if s.use_starred else []
         learner = None
         if s.prefilter == "laya" and s.learn:
             from .learn import retrain
             learner = retrain(s.data_dir, s.feedback_days)
-        starred = mf.starred_titles() if s.use_starred else []
+        starred = [f"{e['feed_title']}: {e['title']}" for e in starred_entries[:30]] if s.use_starred else []
         profile = build_profile(s, starred)
         summarizer = LLM(s.summary_provider, s.summary_model)
 
@@ -310,7 +307,7 @@ def run(s: Settings, dry_run: bool = False) -> dict | None:
     digests = [d for d in digests if (parse_time(d["generated_at"]) or now) >= keep_after]
     _save(digests_path, digests)
     write_feed(s, digests)
-    _save(state_path, {"last_entry_id": max_id, "last_run": now.isoformat()})
+    _save(state_path, {**state, **source_state, "last_run": now.isoformat()})
     feedback.prune(s.data_dir)
     log.info("Feed aktualisiert: %s", s.feed_url)
     return digest

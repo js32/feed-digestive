@@ -19,9 +19,9 @@ def _bool(name: str, default: bool) -> bool:
     return (_env(name, "true" if default else "false") or "").lower() in ("1", "true", "yes", "ja", "on")
 
 
-def _ids(name: str) -> list[int]:
+def _list(name: str) -> list[str]:
     raw = _env(name, "") or ""
-    return [int(x) for x in raw.replace(";", ",").split(",") if x.strip()]
+    return [x.strip() for x in raw.replace(";", ",").split(",") if x.strip()]
 
 
 # OpenAI-kompatible Anbieter: Name -> (Basis-URL, Env-Variable für den Key)
@@ -38,14 +38,21 @@ PROVIDERS = ["anthropic", *OPENAI_COMPATIBLE]
 
 @dataclass
 class Settings:
-    # Miniflux
-    miniflux_url: str
-    miniflux_token: str
+    # Quelle: miniflux | greader
+    source: str = "miniflux"
+    miniflux_url: str = ""
+    miniflux_token: str = ""
+    greader_url: str = ""
+    greader_user: str = ""
+    greader_password: str = ""
+    greader_app_id: str = ""
+    greader_app_key: str = ""
+    greader_labels: list[str] = field(default_factory=list)
     lookback_hours: int = 24
     max_entries: int = 400
     only_unread: bool = False
-    category_ids: list[int] = field(default_factory=list)
-    exclude_feed_ids: list[int] = field(default_factory=list)
+    category_ids: list[str] = field(default_factory=list)
+    exclude_feed_ids: list[str] = field(default_factory=list)
     use_starred: bool = True
 
     # LLM
@@ -104,13 +111,20 @@ class Settings:
     @classmethod
     def from_env(cls) -> "Settings":
         s = cls(
+            source=(_env("SOURCE", "miniflux") or "miniflux").lower(),
+            greader_url=(_env("GREADER_URL") or "").rstrip("/"),
+            greader_user=_env("GREADER_USER", "") or "",
+            greader_password=_env("GREADER_PASSWORD", "") or "",
+            greader_app_id=_env("GREADER_APP_ID", "") or "",
+            greader_app_key=_env("GREADER_APP_KEY", "") or "",
+            greader_labels=_list("GREADER_LABELS"),
             miniflux_url=(_env("MINIFLUX_URL") or "").rstrip("/"),
             miniflux_token=_env("MINIFLUX_API_TOKEN", "") or "",
             lookback_hours=_int("LOOKBACK_HOURS", 24),
             max_entries=_int("MAX_ENTRIES", 400),
             only_unread=_bool("ONLY_UNREAD", False),
-            category_ids=_ids("CATEGORY_IDS"),
-            exclude_feed_ids=_ids("EXCLUDE_FEED_IDS"),
+            category_ids=_list("CATEGORY_IDS"),
+            exclude_feed_ids=_list("EXCLUDE_FEED_IDS"),
             use_starred=_bool("USE_MINIFLUX_STARRED", True),
             scoring_provider=(_env("SCORING_PROVIDER", "anthropic") or "").lower(),
             scoring_model=_env("SCORING_MODEL", "") or "",
@@ -148,10 +162,18 @@ class Settings:
 
     def validate(self) -> None:
         errors = []
-        if not self.miniflux_url:
-            errors.append("MINIFLUX_URL fehlt")
-        if not self.miniflux_token:
-            errors.append("MINIFLUX_API_TOKEN fehlt")
+        if self.source == "miniflux":
+            if not self.miniflux_url:
+                errors.append("MINIFLUX_URL fehlt")
+            if not self.miniflux_token:
+                errors.append("MINIFLUX_API_TOKEN fehlt")
+        elif self.source == "greader":
+            for key, val in (("GREADER_URL", self.greader_url), ("GREADER_USER", self.greader_user),
+                             ("GREADER_PASSWORD", self.greader_password)):
+                if not val:
+                    errors.append(f"{key} fehlt")
+        else:
+            errors.append("SOURCE muss 'miniflux' oder 'greader' sein")
         if self.prefilter not in ("none", "laya"):
             errors.append("PREFILTER muss 'none' oder 'laya' sein")
         if self.scoring_provider == "none" and self.prefilter != "laya":
