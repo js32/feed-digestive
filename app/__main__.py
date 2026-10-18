@@ -11,6 +11,8 @@ from __future__ import annotations
 import logging
 import re
 import sys
+
+import httpx
 import threading
 import time
 from datetime import datetime, timedelta
@@ -120,7 +122,14 @@ def serve(s: Settings) -> None:
 
 def check(s: Settings) -> None:
     src = make_source(s)
-    print(f"✓ {src.name}: angemeldet als {src.check()}")
+    target = s.greader_url if s.source == "greader" else s.miniflux_url
+    try:
+        print(f"✓ {src.name}: angemeldet als {src.check()}")
+    except httpx.ConnectError as e:
+        raise SystemExit(f"✗ {src.name}: {target} nicht erreichbar ({e}).\n"
+                         "  Stimmt die URL in der .env? Löst der Container den Namen auf (DNS)?")
+    except httpx.HTTPError as e:
+        raise SystemExit(f"✗ {src.name}: Fehler bei {target}: {e}")
     if s.prefilter == "laya":
         from .laya_filter import LayaFilter
         flt = LayaFilter(s.config_dir / "laya_questions.json", model=s.laya_model,
