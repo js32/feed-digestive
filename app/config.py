@@ -65,7 +65,7 @@ class Settings:
     prefilter: str = "none"  # none | laya
     prefilter_keep: int = 40
     prefilter_min: float = 2.0
-    laya_model: str = "multilingual"
+    laya_model: str = "auto"
     laya_max_len: int = 1024
     laya_batch_size: int = 8
     # Rückmeldung / Lernen
@@ -73,6 +73,7 @@ class Settings:
     learn: bool = True
     feedback_days: int = 3
     explore_slots: int = 1
+    explore_min_regular: int = 4
     examples_in_prompt: int = 120
 
     # Auswahl / Ausgabe
@@ -134,13 +135,14 @@ class Settings:
             prefilter=(_env("PREFILTER", "none") or "none").lower(),
             prefilter_keep=_int("PREFILTER_KEEP", 40),
             prefilter_min=float(_env("PREFILTER_MIN", "2.0") or 2.0),
-            laya_model=_env("LAYA_MODEL", "multilingual") or "multilingual",
+            laya_model=_env("LAYA_MODEL", "auto") or "auto",
             laya_max_len=_int("LAYA_MAX_LEN", 1024),
             laya_batch_size=_int("LAYA_BATCH_SIZE", 8),
             track_clicks=_bool("TRACK_CLICKS", True),
             learn=_bool("LEARN", True),
             feedback_days=_int("FEEDBACK_DAYS", 3),
             explore_slots=_int("EXPLORE_SLOTS", 1),
+            explore_min_regular=_int("EXPLORE_MIN_REGULAR", 4),
             examples_in_prompt=_int("EXAMPLES_IN_PROMPT", 120),
             top_n=_int("TOP_N", 10),
             min_score=_int("MIN_SCORE", 6),

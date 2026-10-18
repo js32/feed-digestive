@@ -35,7 +35,9 @@ class LayaFilter:
                 "Image mit  docker compose build --build-arg WITH_LAYA=1  bauen."
             ) from e
         self.spec = load_questions(questions_file)
-        self.model = model
+        # "auto": Laya erkennt die Sprache je Artikel – Englisch -> genaueres englisches
+        # Modell, alles andere -> multilingual. Sonst fest vorgegebenes Modell.
+        self.model = None if (model or "").lower() == "auto" else model
         self.max_len = max_len
         self.batch_size = batch_size
         self.router = Router(device=device or os.environ.get("LAYA_DEVICE") or None, max_loaded=1)
@@ -95,9 +97,18 @@ class LayaFilter:
 
     def score(self, items: list[dict], learner=None) -> None:
         """Setzt it['prefilter'] (0–10), it['prefilter_why'] und it['laya_features']."""
-        requests = [{"state": self._state(it), "questions": self.questions,
-                     "model": self.model, "max_len": self.max_len} for it in items]
+        requests = []
+        for it in items:
+            req = {"state": self._state(it), "questions": self.questions, "max_len": self.max_len}
+            if self.model:
+                req["model"] = self.model
+            requests.append(req)
         results = self.router.predict_batch(requests, batch_size=self.batch_size, sort_by_length=True)
+        used: dict[str, int] = {}
+        for res in results:
+            m = (res.get("routing") or {}).get("model", "?")
+            used[m] = used.get(m, 0) + 1
+        log.info("Laya-Modelle: %s", ", ".join(f"{m} {n}×" for m, n in sorted(used.items())))
         for it, res in zip(items, results):
             answers = res.get("answers", {})
             it["laya_features"] = self.features(answers)

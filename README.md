@@ -141,7 +141,7 @@ slim image without it). The questions live in `config/laya_questions.json`:
 
 Score = 10 × best weighted topic probability × (0.4 + 0.6 × depth) × (1 − 0.8 × penalty).
 Narrow, concrete questions work better than broad ones. Questions are best written in English;
-the articles themselves can be in any language (`LAYA_MODEL=multilingual`).
+the articles themselves can be in any language (`LAYA_MODEL=auto` picks the English or multilingual checkpoint per article).
 
 Two ways to run it:
 - **Laya + LLM** (recommended): `PREFILTER=laya` plus a scoring provider.

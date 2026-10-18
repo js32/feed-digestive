@@ -268,7 +268,8 @@ def run(s: Settings, dry_run: bool = False) -> dict | None:
             score(items, scorer, profile, s.scoring_batch_size)
         chosen = select(items, max(1, s.top_n - s.explore_slots), s.min_score)
         # Zufallsfund gegen die Filterblase: ein Artikel knapp unterhalb der Auswahl
-        if s.explore_slots > 0:
+        # erst ab genug regulären Treffern – an dünnen Tagen kein halber Digest aus Zufall
+        if s.explore_slots > 0 and len(chosen) >= s.explore_min_regular:
             picked = {it["id"] for it in chosen}
             pool = [it for it in sorted(all_scored, key=lambda it: -(it.get("score") or it.get("prefilter") or 0))
                     if it["id"] not in picked][:30]

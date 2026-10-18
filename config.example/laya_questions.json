@@ -4,12 +4,12 @@
     "topic_a": {
       "label": "Thema A",
       "weight": 1.0,
-      "question": "Is this article about <your main interest>?"
+      "question": "Is the main topic of this article <your main interest>?"
     },
     "topic_b": {
       "label": "Thema B",
       "weight": 0.8,
-      "question": "Is this article about <another interest>?"
+      "question": "Is the main topic of this article <another interest>?"
     },
     "curious": {
       "label": "Food for thought",
@@ -35,6 +35,10 @@
     "clickbait": {
       "label": "Clickbait/Boulevard",
       "question": "Is this clickbait, or about celebrities, sports results or lifestyle gossip?"
+    },
+    "news": {
+      "label": "Tagesnachricht",
+      "question": "Is this a short news report about a current event, such as a protest, election, accident or political statement?"
     }
   }
 }
