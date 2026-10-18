@@ -17,6 +17,7 @@ from __future__ import annotations
 import json
 import logging
 import os
+import time
 from pathlib import Path
 
 log = logging.getLogger(__name__)
@@ -26,7 +27,8 @@ STATE_CHARS = 2500  # ~600–800 Token, passt in den 1024er-Kontext
 
 class LayaFilter:
     def __init__(self, questions_file: Path, model: str = "multilingual",
-                 device: str | None = None, max_len: int = 1024, batch_size: int = 8):
+                 device: str | None = None, max_len: int = 1024, batch_size: int = 8,
+                 on_chunk=None):
         try:
             from laya import Router  # schwere Abhängigkeit (torch) – nur bei Bedarf laden
         except ImportError as e:
@@ -34,6 +36,11 @@ class LayaFilter:
                 "PREFILTER=laya, aber das Paket 'laya' ist nicht installiert. "
                 "Image mit  docker compose build --build-arg WITH_LAYA=1  bauen."
             ) from e
+        threads = int(os.environ.get("LAYA_THREADS", "0") or 0)
+        if threads > 0:  # im Container erkennt PyTorch die Kerne nicht immer richtig
+            import torch
+            torch.set_num_threads(threads)
+        self.on_chunk = on_chunk  # wird nach jedem Block mit den fertigen Artikeln aufgerufen
         self.spec = load_questions(questions_file)
         # "auto": Laya erkennt die Sprache je Artikel – Englisch -> genaueres englisches
         # Modell, alles andere -> multilingual. Sonst fest vorgegebenes Modell.
@@ -121,21 +128,31 @@ class LayaFilter:
                 it["prefilter_why"] += f", gelernt {learner.prob(it['laya_features']):.2f} (Formel {formula})"
 
     def _run_laya(self, items: list[dict]) -> None:
-        requests = []
-        for it in items:
-            req = {"state": self._state(it), "questions": self.questions, "max_len": self.max_len}
-            if self.model:
-                req["model"] = self.model
-            requests.append(req)
-        results = self.router.predict_batch(requests, batch_size=self.batch_size, sort_by_length=True)
+        chunk_size = max(1, int(os.environ.get("LAYA_CHUNK", "32") or 32))
         used: dict[str, int] = {}
-        for res in results:
-            m = (res.get("routing") or {}).get("model", "?")
-            used[m] = used.get(m, 0) + 1
+        start = time.monotonic()
+        for i in range(0, len(items), chunk_size):
+            chunk = items[i:i + chunk_size]
+            requests = []
+            for it in chunk:
+                req = {"state": self._state(it), "questions": self.questions, "max_len": self.max_len}
+                if self.model:
+                    req["model"] = self.model
+                requests.append(req)
+            results = self.router.predict_batch(requests, batch_size=self.batch_size, sort_by_length=True)
+            for it, res in zip(chunk, results):
+                it["laya_features"] = self.features(res.get("answers", {}))
+                it["_laya_fresh"] = True
+                m = (res.get("routing") or {}).get("model", "?")
+                used[m] = used.get(m, 0) + 1
+            done = i + len(chunk)
+            elapsed = time.monotonic() - start
+            eta = elapsed / done * (len(items) - done)
+            log.info("Laya: %d/%d Artikel (%.1f s/Artikel, Rest ca. %d min)",
+                     done, len(items), elapsed / done, eta // 60)
+            if self.on_chunk:
+                self.on_chunk(chunk)
         log.info("Laya-Modelle: %s", ", ".join(f"{m} {n}×" for m, n in sorted(used.items())))
-        for it, res in zip(items, results):
-            it["laya_features"] = self.features(res.get("answers", {}))
-            it["_fresh"] = True
 
 
 def load_questions(path: Path) -> dict:

@@ -234,6 +234,19 @@ def summarize(item: dict, llm: LLM, profile: str, lang: str) -> dict:
 # Lauf
 # ----------------------------------------------------------------------
 def run(s: Settings, dry_run: bool = False) -> dict | None:
+    """Ein Lauf – nie zwei gleichzeitig (z. B. manueller Nachtlauf + geplanter Lauf)."""
+    import fcntl
+    s.data_dir.mkdir(parents=True, exist_ok=True)
+    with open(s.data_dir / "run.lock", "w") as lock:
+        try:
+            fcntl.flock(lock, fcntl.LOCK_EX | fcntl.LOCK_NB)
+        except BlockingIOError:
+            log.warning("Ein anderer Lauf ist noch aktiv – dieser wird übersprungen")
+            return None
+        return _run(s, dry_run)
+
+
+def _run(s: Settings, dry_run: bool = False) -> dict | None:
     state_path = s.data_dir / "state.json"
     digests_path = s.data_dir / "digests.json"
     state = _load(state_path, {})
@@ -286,8 +299,13 @@ def run(s: Settings, dry_run: bool = False) -> dict | None:
         # Stufe 0 (optional): lokaler Vorfilter mit Laya, schickt nichts nach außen
         if s.prefilter == "laya":
             from .laya_filter import LayaFilter, apply_prefilter
+            def save_chunk(chunk):  # Zwischenstand sichern – ein Abbruch kostet so keine Arbeit
+                if not dry_run:
+                    feedback.log_history(s.data_dir, run_id, chunk, set())
+                    for it in chunk:
+                        it["_logged"] = True
             flt = LayaFilter(s.config_dir / "laya_questions.json", model=s.laya_model,
-                             max_len=s.laya_max_len, batch_size=s.laya_batch_size)
+                             max_len=s.laya_max_len, batch_size=s.laya_batch_size, on_chunk=save_chunk)
             all_scored = items  # fürs Protokoll: auch Aussortierte (können später einen Stern bekommen)
             items = apply_prefilter(items, flt, s.prefilter_keep, s.prefilter_min, learner,
                                     min_keep=3 * s.min_items)
@@ -337,7 +355,7 @@ def run(s: Settings, dry_run: bool = False) -> dict | None:
             # bei "alle Ungelesenen" jeden Tag um dieselben Artikel
             shown_ids = {it["id"] for it in chosen}
             to_log = [it for it in all_scored if it.get("_fresh") or it["id"] in shown_ids
-                      or str(it["id"]) not in cache]
+                      or (str(it["id"]) not in cache and not it.get("_logged"))]
             feedback.log_history(s.data_dir, run_id, to_log, shown_ids)
 
         local = now.astimezone(ZoneInfo(s.tz))
