@@ -1,11 +1,12 @@
-# /etc/nginx/sites-available/rss.js32.de
-# Aktivieren: ln -s /etc/nginx/sites-available/rss.js32.de /etc/nginx/sites-enabled/
-# Zertifikat:  certbot --nginx -d rss.js32.de   (oder deine bestehende Lösung)
+# Beispiel-Konfiguration – digest.example.org durch deine Domain ersetzen
+# /etc/nginx/sites-available/digest.example.org
+# Aktivieren: ln -s /etc/nginx/sites-available/digest.example.org /etc/nginx/sites-enabled/
+# Zertifikat:  certbot --nginx -d digest.example.org   (oder deine bestehende Lösung)
 
 server {
     listen 80;
     listen [::]:80;
-    server_name rss.js32.de;
+    server_name digest.example.org;
     location /.well-known/acme-challenge/ { root /var/www/html; }
     location / { return 301 https://$host$request_uri; }
 }
@@ -14,10 +15,10 @@ server {
     listen 443 ssl;
     listen [::]:443 ssl;
     http2 on;
-    server_name rss.js32.de;
+    server_name digest.example.org;
 
-    ssl_certificate     /etc/letsencrypt/live/rss.js32.de/fullchain.pem;
-    ssl_certificate_key /etc/letsencrypt/live/rss.js32.de/privkey.pem;
+    ssl_certificate     /etc/letsencrypt/live/digest.example.org/fullchain.pem;
+    ssl_certificate_key /etc/letsencrypt/live/digest.example.org/privkey.pem;
 
     # Nur der Feed (und der Health-Check) werden durchgereicht, alles andere 404.
     location ~ ^/[A-Za-z0-9_-]+/feed\.xml$ {

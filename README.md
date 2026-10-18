@@ -2,204 +2,244 @@
 
 *Eats your RSS feeds, digests them overnight, serves you only the nutritious bits. Self-hosted, light-weight(s), learns your taste, no tracking but your own.*
 
-Holt täglich die neuen Artikel aus deinem **Miniflux**, lässt sie von einem LLM anhand
-deines Interessenprofils bewerten, schreibt zu den besten einen kurzen Auszug und
-veröffentlicht das Ergebnis als **Atom-Feed**, den du wieder in Miniflux abonnierst.
+Every night feed-digestive reads all new articles from your feed reader, picks the handful that
+actually match your interests, writes a short excerpt for each and publishes the result as an
+**Atom feed**, which you subscribe to in that same reader. 300 articles in, 10 worth reading out.
 
 ```
-Miniflux-API ──► Filter/Dedupe ──► Bewertung (günstiges Modell, alle Artikel)
-                                  └► Top N ──► Auszüge (gutes Modell) ──► feed.xml ──► nginx ──► rss.js32.de
+feed reader ──► dedupe ──► Laya (local, optional) ──► LLM scoring ──► top 10 ──► excerpts ──► feed.xml
+   ▲                                                                                              │
+   └──────────── stars & clicks ◄── learns your taste ◄── you read the digest ◄──────────────────┘
 ```
 
-## Einrichtung
+## What it does
 
-1. **Dateien auf den VPS kopieren**, z. B. nach `/opt/feed-digestive`.
+- **Reads your feed reader:** Miniflux (native API) or anything that speaks the Google Reader
+  API (FreshRSS, Inoreader, The Old Reader, BazQux, Miniflux, Tiny Tiny RSS / Nextcloud News via plugin).
+- **Filters locally:** [Laya](https://laya.convaiinnovations.com/), a small decision model
+  (~320M parameters) running on your CPU, pre-scores every article against a question catalogue,
+  so nothing leaves your server for that step.
+- **Scores and summarises with an LLM of your choice:** Anthropic, OpenAI, Mistral, OpenRouter,
+  Gemini, Ollama (local) or any OpenAI-compatible endpoint. Scoring and excerpts can use
+  different providers, e.g. a cheap model for scoring and a good one for writing.
+- **Knows what you like:** an editable interest profile, examples from your reading history and
+  the articles you starred.
+- **Learns from you:** clicks in the digest and stars in your reader train a small model on top
+  of Laya's answers. A 🎲 random pick per digest keeps the filter bubble in check.
+- **Publishes a feed:** one daily digest entry, or one entry per article. Excerpts in the
+  language of your choice, whatever language the original is in.
+- **Stays yours:** one Docker container, state in plain JSON files, no database, no telemetry.
 
-2. **Konfiguration anlegen**
-   ```bash
-   cd /opt/feed-digestive
-   cp .env.example .env
-   cp -r config.example config   # dann config/interests.md mit deinen Interessen füllen
-   openssl rand -hex 16          # -> als FEED_TOKEN in .env eintragen
-   mkdir -p data && sudo chown 1000:1000 data
-   ```
-   In `.env` mindestens eintragen: `MINIFLUX_URL`, `MINIFLUX_API_TOKEN`
-   (Miniflux → Einstellungen → API-Schlüssel), LLM-Anbieter, Modelle und API-Key, `FEED_TOKEN`.
+## Requirements
 
-   Läuft Miniflux auf demselben Host, kannst du `MINIFLUX_URL=https://deine-miniflux-domain`
-   nehmen, oder (wenn der Port auf dem Host lauscht) `http://host.docker.internal:PORT`.
+- Docker with Docker Compose
+- A feed reader with API access (see [Sources](#sources))
+- An API key for at least one LLM provider, or Ollama for fully local operation
+- A reverse proxy with HTTPS (example config for nginx included) so your reader can fetch the feed
+- With Laya: about 2 GB of free RAM during the nightly run and ~1.5 GB of disk for image and model
 
-3. **Starten und testen**
-   ```bash
-   docker compose up -d --build
-   docker compose exec digest python -m app check     # Miniflux + LLMs erreichbar?
-   docker compose exec digest python -m app dry-run   # Probelauf, speichert nichts
-   docker compose exec digest python -m app run       # echten Digest jetzt erzeugen
-   ```
+## Installation
 
-4. **nginx**: `deploy/nginx-rss.js32.de.conf` nach `/etc/nginx/sites-available/` kopieren,
-   verlinken, Zertifikat holen (`certbot --nginx -d rss.js32.de`), `nginx -t && systemctl reload nginx`.
-   DNS: A/AAAA-Eintrag für `rss.js32.de` auf den VPS.
+```bash
+git clone https://github.com/js32/feed-digestive.git
+cd feed-digestive
 
-5. **Abonnieren**: `https://rss.js32.de/<FEED_TOKEN>/feed.xml` in Miniflux hinzufügen.
-   Der eigene Digest-Feed wird automatisch nicht erneut ausgewertet.
+cp .env.example .env                 # configure, see below
+cp -r config.example config          # your interest profile
+mkdir -p data && sudo chown 1000:1000 data
+openssl rand -hex 16                 # use as FEED_TOKEN in .env
+```
 
-## Quellen
+Minimum settings in `.env`:
 
-| `SOURCE` | Dienste | Anmeldung |
+```ini
+SOURCE=miniflux                      # or greader
+MINIFLUX_URL=https://miniflux.example.org
+MINIFLUX_API_TOKEN=...               # Miniflux → Settings → API Keys
+
+SCORING_PROVIDER=mistral             # anthropic | openai | mistral | openrouter | gemini | ollama | custom
+SCORING_MODEL=mistral-small-latest
+SUMMARY_PROVIDER=mistral
+SUMMARY_MODEL=mistral-medium-latest
+MISTRAL_API_KEY=...
+
+PUBLIC_URL=https://digest.example.org
+FEED_TOKEN=<random hex>
+DIGEST_TIME=06:30
+TZ=Europe/Berlin
+OUTPUT_LANGUAGE=English
+```
+
+Then build, check and do a test run:
+
+```bash
+docker compose up -d --build
+docker compose exec digest python -m app check     # reader, Laya and LLMs reachable?
+docker compose exec digest python -m app dry-run   # full run, prints the result, saves nothing
+docker compose exec digest python -m app run       # create a real digest now
+```
+
+The first `check` downloads the Laya model (~1 GB) into `data/hf`.
+
+**Reverse proxy:** the container only listens on `127.0.0.1:8087`. Copy
+`deploy/nginx.conf.example`, replace `digest.example.org` with your domain, get a certificate
+(e.g. `certbot --nginx -d your.domain`) and reload nginx. Only the feed and the click redirects
+are passed through, everything else returns 404.
+
+**Subscribe** to `https://your.domain/<FEED_TOKEN>/feed.xml` in your reader. The digest feed
+itself is automatically excluded from the next digest.
+
+## Configuration
+
+All settings live in `.env`. `.env.example` documents every option; the important groups:
+
+### Sources
+
+| `SOURCE` | Works with | Credentials |
 |---|---|---|
-| `miniflux` | Miniflux (native API) | `MINIFLUX_URL`, `MINIFLUX_API_TOKEN` |
-| `greader` | alle mit Google-Reader-API: FreshRSS, Inoreader, The Old Reader, BazQux, Miniflux, Tiny Tiny RSS / Nextcloud News (mit Plugin) | `GREADER_URL`, `GREADER_USER`, `GREADER_PASSWORD` |
+| `miniflux` | Miniflux | `MINIFLUX_URL`, `MINIFLUX_API_TOKEN` |
+| `greader` | FreshRSS, Inoreader, The Old Reader, BazQux, Miniflux, TT-RSS / Nextcloud News (plugin) | `GREADER_URL`, `GREADER_USER`, `GREADER_PASSWORD` |
 
-Beispiele für `GREADER_URL`:
-- FreshRSS: `https://freshrss.example.de/api/greader.php`. API-Zugang in den Einstellungen
-  aktivieren und im Profil ein eigenes API-Passwort setzen.
-- Miniflux: `https://miniflux.example.de`. Google-Reader-Integration in den Einstellungen aktivieren.
-- Inoreader: `https://www.inoreader.com`, zusätzlich `GREADER_APP_ID`/`GREADER_APP_KEY` aus
-  einem Inoreader-Entwicklerkonto.
+`GREADER_URL` examples:
+- FreshRSS: `https://freshrss.example.org/api/greader.php`. Enable API access and set a separate
+  API password in your profile.
+- Miniflux: `https://miniflux.example.org`. Enable the Google Reader integration first.
+- Inoreader: `https://www.inoreader.com`, plus `GREADER_APP_ID` / `GREADER_APP_KEY` from a
+  developer account.
 
-Mit `GREADER_LABELS=Tech,Wissenschaft` werden nur diese Ordner gelesen. Sterne, Klicks und
-Lernen funktionieren mit beiden Quellen gleich. Wer die Quelle wechselt, sollte `data/state.json`
-löschen, weil sich die Artikel-IDs ändern.
+`GREADER_LABELS=Tech,Science` limits the digest to those folders. When switching sources, delete
+`data/state.json`, since article IDs differ between sources.
 
-## LLM-Anbieter
+### LLM providers
 
-Zwei Stufen, getrennt konfigurierbar (`SCORING_*` und `SUMMARY_*`):
-
-| Anbieter | `*_PROVIDER` | Key-Variable | Hinweis |
+| Provider | `*_PROVIDER` | Key | Notes |
 |---|---|---|---|
-| Anthropic Claude | `anthropic` | `ANTHROPIC_API_KEY` | Profil wird per Prompt-Caching wiederverwendet |
+| Anthropic | `anthropic` | `ANTHROPIC_API_KEY` | profile is prompt-cached across batches |
 | OpenAI | `openai` | `OPENAI_API_KEY` | |
-| Mistral | `mistral` | `MISTRAL_API_KEY` | EU-Anbieter |
-| OpenRouter | `openrouter` | `OPENROUTER_API_KEY` | viele Modelle über einen Key |
-| Google Gemini | `gemini` | `GEMINI_API_KEY` | OpenAI-kompatibler Endpunkt |
-| Ollama | `ollama` | – | `OLLAMA_BASE_URL`, lokal, kostenlos, langsamer |
-| Sonstige | `custom` | `CUSTOM_API_KEY` | `CUSTOM_BASE_URL`, jeder OpenAI-kompatible Endpunkt |
+| Mistral | `mistral` | `MISTRAL_API_KEY` | EU provider |
+| OpenRouter | `openrouter` | `OPENROUTER_API_KEY` | many models, one key |
+| Google Gemini | `gemini` | `GEMINI_API_KEY` | via OpenAI-compatible endpoint |
+| Ollama | `ollama` | – | local; `OLLAMA_BASE_URL` |
+| Anything else | `custom` | `CUSTOM_API_KEY` | `CUSTOM_BASE_URL`, any OpenAI-compatible API |
 
-Mischen geht, z. B. Bewertung lokal mit Ollama und Auszüge mit Claude.
+Rough daily volume for 300 new articles without Laya: ~8 scoring calls of 10–15k input tokens
+each, plus ~10 excerpt calls of 5–8k tokens. With Laya in front, only ~40 articles reach the
+scoring model.
 
-### Lokal bewerten, per API zusammenfassen
+### Laya pre-filter
+
+```
+all new articles ──► Laya (local, question catalogue) ──► top 40 ──► LLM scoring ──► top 10 ──► excerpts
+```
+
+Enabled with `PREFILTER=laya` (the default image includes Laya; build with `WITH_LAYA=0` for a
+slim image without it). The questions live in `config/laya_questions.json`:
+
+- `topics`: one yes/no question per interest, each with a weight (0–1)
+- `depth`: a scale from "short news item" to "exceptional essay or major finding"
+- `penalties`: reasons to drop an article (press release, clickbait, …)
+
+Score = 10 × best weighted topic probability × (0.4 + 0.6 × depth) × (1 − 0.8 × penalty).
+Narrow, concrete questions work better than broad ones. Questions are best written in English;
+the articles themselves can be in any language (`LAYA_MODEL=multilingual`).
+
+Two ways to run it:
+- **Laya + LLM** (recommended): `PREFILTER=laya` plus a scoring provider.
+- **Laya only**: `SCORING_PROVIDER=none`, `MIN_SCORE=4`. Scoring costs nothing; only the
+  excerpts go to an LLM, or to Ollama for a fully offline setup.
+
+### Fully local with Ollama
 
 ```bash
 docker compose --profile local up -d
 docker compose exec ollama ollama pull qwen3.5:4b
 ```
-`.env`:
-```
+
+```ini
 SCORING_PROVIDER=ollama
 SCORING_MODEL=qwen3.5:4b
 OLLAMA_BASE_URL=http://ollama:11434/v1
 SCORING_BATCH_SIZE=15
 EXAMPLES_IN_PROMPT=40
-SUMMARY_PROVIDER=mistral          # oder anthropic, openai …
-SUMMARY_MODEL=mistral-medium-latest
-```
-Dann gehen nur noch die ~10 ausgewählten Artikel an die API, nicht mehr alle 300
-und nicht mehr dein vollständiges Profil mit allen Beispielen. Auf einer CPU dauert ein
-Lauf je nach Artikelmenge eine halbe bis mehrere Stunden; da er nachts läuft, ist das egal.
-Bei sehr langsamen Läufen: `MAX_ENTRIES` senken oder `CATEGORY_IDS` setzen.
-
-**Volumen pro Tag** (grob): bei 300 neuen Artikeln etwa 8 Bewertungs-Aufrufe mit je ca.
-10–15 k Eingabe-Token (Profil + 40 Anrisse) und 10 Auszug-Aufrufe mit je ca. 5–8 k Token.
-Mit `EXAMPLES_IN_PROMPT`, `SCORING_BATCH_SIZE` und `CATEGORY_IDS` lässt sich das senken.
-
-## Laya-Vorfilter (lokal, ohne LLM)
-
-[Laya](https://laya.convaiinnovations.com/) ist ein kleines Entscheidungsmodell (ca. 320–420
-Mio. Parameter, Apache 2.0), das Ja/Nein- und Skalenfragen mit Wahrscheinlichkeiten
-beantwortet. Es läuft auf der CPU des VPS, kein Artikel verlässt dafür den Server.
-
-```
-alle neuen Artikel ──► Laya (lokal, Fragenkatalog) ──► Top 40 ──► LLM-Bewertung ──► Top 10 ──► Auszüge
 ```
 
-Einrichten:
-```bash
-WITH_LAYA=1 docker compose up -d --build     # Image mit PyTorch-CPU + laya
-# .env: PREFILTER=laya
-docker compose exec digest python -m app check   # lädt beim ersten Mal das Modell (~1 GB nach data/hf)
-docker compose exec digest python -m app dry-run
-```
+On a CPU-only server a run can take an hour or more. It runs at night, so that's usually fine.
 
-Die Fragen stehen in `config/laya_questions.json`:
-- `topics`: je Interesse eine Ja/Nein-Frage mit Gewicht (0–1)
-- `depth`: Skala von „Kurzmeldung“ bis „herausragend“
-- `penalties`: Ausschlussgründe (PR, Clickbait …)
+### Your interest profile
 
-Wert = 10 × beste gewichtete Themen-Wahrscheinlichkeit × (0,4 + 0,6 × Tiefe) × (1 − 0,8 × Malus).
-Konkrete, eng gefasste Fragen funktionieren besser als allgemeine. Englische Fragen sind am
-zuverlässigsten, die Artikel selbst dürfen deutsch sein (`LAYA_MODEL=multilingual`).
+Your personal profile lives in `config/`, which is git-ignored. The repo only ships templates in
+`config.example/`.
 
-Varianten:
-- **Laya + LLM** (empfohlen): `PREFILTER=laya`, `SCORING_PROVIDER=…` – das LLM sieht nur noch ~40 Artikel.
-- **Nur Laya**: `SCORING_PROVIDER=none`, `MIN_SCORE=4` – die Bewertung kostet nichts, nur
-  die Auszüge gehen noch an ein LLM (oder an Ollama lokal → komplett ohne Cloud).
-
-## Lernen aus Klicks und Sternen
-
-Der Digest merkt sich, was du liest, und passt die Laya-Bewertung daran an.
-Alles bleibt auf deinem Server.
-
-**Was gesammelt wird** (in `data/`, 180 Tage):
-- `history.jsonl`: jeder bewertete Artikel mit den Laya-Antworten und ob er im Digest stand
-- `feedback.jsonl`: Klicks und Sterne
-
-**Rückmeldung:**
-- **Klicks**: Die Links im Digest zeigen auf `rss.js32.de/<token>/r/<id>`. Die App zählt den
-  Klick und leitet sofort weiter. Abrufe von Miniflux-Crawler, Vorschau-Bots und Skripten
-  zählen nicht. Das Ziel sieht weder den geheimen Pfad (`Referrer-Policy: no-referrer`) noch
-  dass du über den Digest kamst.
-- **Sterne**: Sterne in Miniflux, sowohl auf Original-Artikeln als auch auf Digest-Einträgen,
-  holt die App bei jedem Lauf per API ab.
-
-**Lernen:** Ein kleines Regressionsmodell lernt aus den Laya-Antworten, was du anklickst.
-Es startet ab 5 positiven und 10 negativen Rückmeldungen. Sein Anteil am Wert wächst mit der
-Zahl der Klicks und Sterne auf höchstens 80 %, den Rest liefert weiterhin die Formel mit
-deinen Gewichten. Ein gezeigter Artikel zählt erst nach `FEEDBACK_DAYS` ohne Klick als negativ.
-
-```bash
-docker compose exec digest python -m app learn   # was hat es gelernt?
-```
-
-**Filterblase:** Pro Digest ist ein Platz (`EXPLORE_SLOTS`) ein 🎲 Zufallsfund knapp
-unterhalb der Auswahl. So bekommen auch Themen, die das Modell gerade unterschätzt, eine
-Chance auf deine Klicks.
-
-Ohne Laya werden Klicks und Sterne trotzdem gesammelt. Gelernt wird erst, wenn Laya aktiv ist.
-
-## Interessenprofil anpassen
-
-Das persönliche Profil liegt in `config/` und ist per `.gitignore` vom Repo
-ausgeschlossen. Im Repo liegen nur die Vorlagen in `config.example/`.
-
-- `config/interests.md` – Themen, Prioritäten, was du nicht willst. Frei editierbar,
-  wird bei jedem Lauf neu gelesen (kein Neustart nötig).
-- `config/examples.txt` – deine zuletzt gespeicherten Artikel als Beispiele. Neu erzeugen
-  aus einem frischen Export:
+- `config/interests.md`: topics, priorities, what you don't want. Re-read on every run.
+- `config/examples.txt`: articles you saved in the past, as examples for the LLM. Generate from a
+  read-later export (JSON list with `link` and `tags`):
   ```bash
   python3 tools/import_readlater.py ReadLater.json config/examples.txt 200
   ```
-- Mit Stern markierte Artikel in Miniflux fließen automatisch mit ein (`USE_MINIFLUX_STARRED`).
+- `config/laya_questions.json`: the Laya question catalogue.
+- Starred articles in your reader are added to the profile automatically (`USE_MINIFLUX_STARRED`).
 
-Kommen zu viele/zu wenige Artikel: `MIN_SCORE` und `TOP_N` anpassen.
-`FEED_MODE=items` macht aus jedem Artikel einen eigenen Feed-Eintrag statt eines Tages-Digests.
+Too many or too few articles? Adjust `MIN_SCORE` and `TOP_N`. `FEED_MODE=items` turns every
+article into its own feed entry instead of one daily digest.
 
-## Betrieb
+## Learning from clicks and stars
 
-- Logs: `docker compose logs -f digest`
-- Zustand liegt in `data/` (`state.json`, `digests.json`, `feed.xml`). Löschen von
-  `state.json` = nächster Lauf startet wieder mit den letzten `LOOKBACK_HOURS`.
-- Datenschutz: Titel, Anrisse und Volltexte der Artikel sowie dein Profil gehen an den
-  gewählten LLM-Anbieter. Wer das nicht will: Ollama.
+feed-digestive learns what you actually read, and keeps that knowledge on your server.
 
-## Lizenz
+- **Clicks:** links in the digest point to `your.domain/<token>/r/<id>`, which records the click
+  and redirects to the article. Crawlers, link previews and scripts don't count. The target
+  site sees neither your secret path (`Referrer-Policy: no-referrer`) nor that you came from the digest.
+- **Stars:** stars in your reader, on original articles or on digest entries, are collected on
+  every run.
+- **Learning:** a small logistic regression on Laya's answers predicts what you'll click. It
+  kicks in after 5 positive and 10 negative examples, and its share of the score grows with
+  feedback up to 80%. A shown article only counts as "not interesting" after `FEEDBACK_DAYS`
+  without a click.
+- **Filter bubble:** one slot per digest (`EXPLORE_SLOTS`) is a 🎲 random pick from just below
+  the cut-off, so topics the model underrates still get a chance.
 
-[PolyForm Noncommercial 1.0.0](LICENSE.md): Nutzung, Änderung und Weitergabe sind für
-nicht-kommerzielle Zwecke erlaubt, etwa private Nutzung, Forschung, Bildung und gemeinnützige
-Organisationen. Kommerzielle Nutzung, auch von Teilen des Codes, ist nicht erlaubt. Wer das
-Projekt kommerziell einsetzen möchte, kann beim Urheber nach einer gesonderten Lizenz fragen.
+```bash
+docker compose exec digest python -m app learn    # show what it has learned
+```
 
-Damit ist feed-digestive *source available*, aber nicht Open Source im Sinne der OSI.
+Data is kept in `data/history.jsonl` and `data/feedback.jsonl` for 180 days. Set
+`TRACK_CLICKS=false` to learn from stars only.
 
-Abhängigkeiten wie httpx, PyTorch und [Laya](https://laya.convaiinnovations.com/) (Apache 2.0)
-stehen unter ihren eigenen Lizenzen und sind nicht Teil dieses Repositorys.
+## Operation
+
+| Command | What it does |
+|---|---|
+| `docker compose logs -f digest` | follow the logs |
+| `docker compose exec digest python -m app check` | test reader, Laya and LLM connections |
+| `docker compose exec digest python -m app dry-run` | full run without saving anything |
+| `docker compose exec digest python -m app run` | create a digest now |
+| `docker compose exec digest python -m app learn` | show learned weights |
+
+State lives in `data/` as plain files: `state.json` (where the last run stopped), `digests.json`,
+`feed.xml`, the learning logs and the Laya model. Deleting `state.json` makes the next run start
+over with the last `LOOKBACK_HOURS`.
+
+The container runs as an unprivileged user with a read-only filesystem, no capabilities and
+memory/CPU limits (`DIGEST_MEM_LIMIT`, `DIGEST_CPUS`).
+
+## Privacy
+
+- **Stays on your server:** your reading history, clicks, stars, the learned model and,
+  with Laya, the pre-filtering of all articles.
+- **Goes to your LLM provider:** titles, snippets and text of the articles being scored or
+  summarised, plus your interest profile. With Laya in front, that's ~40 instead of all
+  articles. Use Ollama if nothing should leave your server.
+- The feed URL contains a secret token. Anyone with the URL can read your digest, so treat it
+  like a password.
+
+## License
+
+[PolyForm Noncommercial 1.0.0](LICENSE.md). You may use, modify and share feed-digestive for any
+noncommercial purpose: personal use, research, education, charitable and public organisations.
+Commercial use, including use of parts of the code, is not permitted. For commercial licensing,
+please get in touch.
+
+This makes feed-digestive *source available*, not open source in the OSI sense.
+
+Dependencies such as httpx, PyTorch and [Laya](https://laya.convaiinnovations.com/) (Apache 2.0)
+are covered by their own licenses and are not part of this repository.

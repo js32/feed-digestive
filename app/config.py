@@ -101,7 +101,7 @@ class Settings:
 
     @property
     def feed_base(self) -> str:
-        """Öffentliche Basis-URL inkl. geheimem Pfad, z. B. https://rss.js32.de/<token>"""
+        """Öffentliche Basis-URL inkl. geheimem Pfad, z. B. https://digest.example.org/<token>"""
         return self.public_url.rstrip("/") + (f"/{self.feed_token}" if self.feed_token else "")
 
     @property
