@@ -1,34 +1,68 @@
+# rss-digest – täglicher Digest aus Miniflux als Atom-Feed
+#
+# Erststart:
+#   cp .env.example .env            # ausfüllen (siehe README)
+#   cp -r config.example config     # bzw. dein privates Profil nach config/
+#   mkdir -p data && sudo chown 1000:1000 data
+#   docker compose up -d --build
+#   docker compose exec digest python -m app check
+#
+# Mit lokalem Ollama zusätzlich:  docker compose --profile local up -d
+
+x-logging: &logging
+  driver: json-file
+  options:
+    max-size: "10m"
+    max-file: "3"
+
 services:
   digest:
     build:
       context: .
       args:
-        WITH_LAYA: "${WITH_LAYA:-0}"   # 1 = lokaler Laya-Vorfilter
+        # 1 = Image mit Laya-Vorfilter (PyTorch-CPU, ca. +1 GB), 0 = schlank ohne Laya
+        WITH_LAYA: "${WITH_LAYA:-1}"
+    image: rss-digest:local
     container_name: rss-digest
     restart: unless-stopped
     env_file: .env
+    environment:
+      TZ: "${TZ:-Europe/Berlin}"
+      HF_HOME: /data/hf           # Laya-Modell bleibt im Volume, kein Neu-Download
+      XDG_CACHE_HOME: /tmp/cache  # sonstige Caches (torch) ins tmpfs, Dateisystem ist read-only
     volumes:
-      - ./data:/data              # Zustand, Digests, feed.xml, Laya-Modell (data/hf)
-      - ./config:/config:ro       # interests.md, examples.txt (live editierbar)
+      - ./data:/data              # Zustand, Digests, feed.xml, Lernprotokoll, Laya-Modell
+      - ./config:/config:ro       # interests.md, examples.txt, laya_questions.json
     ports:
       - "127.0.0.1:8087:8080"     # nur lokal – nginx auf dem Host leitet weiter
     extra_hosts:
-      - "host.docker.internal:host-gateway"   # für Dienste auf dem Host
+      - "host.docker.internal:host-gateway"   # für Dienste auf dem Host (z. B. Miniflux)
+    # Laya braucht beim Lauf ca. 1,5–2 GB RAM; Grenze schützt die anderen Dienste
+    mem_limit: "${DIGEST_MEM_LIMIT:-3g}"
+    cpus: "${DIGEST_CPUS:-2}"
+    read_only: true
+    tmpfs:
+      - /tmp
+    security_opt:
+      - no-new-privileges:true
+    cap_drop: [ALL]
+    logging: *logging
 
-  # Optional: lokales Modell zum Bewerten. Start mit:
+  # Optional: lokales LLM (Bewertung/Auszüge ohne Cloud)
   #   docker compose --profile local up -d
   #   docker compose exec ollama ollama pull qwen3.5:4b
-  # und in .env: SCORING_PROVIDER=ollama, OLLAMA_BASE_URL=http://ollama:11434/v1
+  #   .env: SCORING_PROVIDER=ollama  OLLAMA_BASE_URL=http://ollama:11434/v1
   ollama:
-    image: ollama/ollama:latest
+    image: ollama/ollama:latest   # für reproduzierbare Updates auf eine Version festlegen
     container_name: rss-digest-ollama
     profiles: ["local"]
     restart: unless-stopped
     volumes:
       - ./ollama:/root/.ollama
     environment:
-      # Standard-Kontext ist zu klein für Profil + 15 Artikel
-      - OLLAMA_CONTEXT_LENGTH=16384
-      - OLLAMA_KEEP_ALIVE=10m
-      - OLLAMA_NUM_PARALLEL=1
-    # kein Port nach außen nötig – digest erreicht ollama im Compose-Netz
+      OLLAMA_CONTEXT_LENGTH: "16384"  # Standard ist zu klein für Profil + Artikel
+      OLLAMA_KEEP_ALIVE: "10m"
+      OLLAMA_NUM_PARALLEL: "1"
+    mem_limit: "${OLLAMA_MEM_LIMIT:-6g}"
+    logging: *logging
+    # kein Port nach außen – digest erreicht ollama über das Compose-Netz
