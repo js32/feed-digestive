@@ -243,6 +243,10 @@ memory/CPU limits (`DIGEST_MEM_LIMIT`, `DIGEST_CPUS`).
 - The feed URL contains a secret token. Anyone with the URL can read your digest, so treat it
   like a password.
 
+## Roadmap
+
+Planned work, especially on privacy and the digest layout, is tracked in [ROADMAP.md](ROADMAP.md).
+
 ## License
 
 [PolyForm Noncommercial 1.0.0](LICENSE.md). You may use, modify and share feed-digestive for any
