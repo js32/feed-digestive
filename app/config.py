@@ -79,6 +79,8 @@ class Settings:
     # Auswahl / Ausgabe
     top_n: int = 10
     min_score: int = 6
+    min_items: int = 5
+    floor_score: int = 3
     output_language: str = "Deutsch"
     feed_mode: str = "daily"  # daily | items
     feed_title: str = "Mein Tages-Digest"
@@ -146,6 +148,8 @@ class Settings:
             examples_in_prompt=_int("EXAMPLES_IN_PROMPT", 120),
             top_n=_int("TOP_N", 10),
             min_score=_int("MIN_SCORE", 6),
+            min_items=_int("MIN_ITEMS", 5),
+            floor_score=_int("FLOOR_SCORE", 3),
             output_language=_env("OUTPUT_LANGUAGE", "Deutsch") or "Deutsch",
             feed_mode=(_env("FEED_MODE", "daily") or "daily").lower(),
             feed_title=_env("FEED_TITLE", "Mein Tages-Digest") or "Mein Tages-Digest",

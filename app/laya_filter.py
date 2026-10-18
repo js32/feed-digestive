@@ -132,10 +132,13 @@ def load_questions(path: Path) -> dict:
 
 
 def apply_prefilter(items: list[dict], flt: LayaFilter, keep: int, min_value: float,
-                    learner=None) -> list[dict]:
+                    learner=None, min_keep: int = 0) -> list[dict]:
     flt.score(items, learner)
     ranked = sorted(items, key=lambda it: -it["prefilter"])
     kept = [it for it in ranked if it["prefilter"] >= min_value][:keep]
+    # an dünnen Tagen genug für das LLM übrig lassen – Laya ist nur ein grobes Sieb
+    if len(kept) < min(min_keep, keep):
+        kept = ranked[:min(min_keep, keep)]
     log.info("Laya-Vorfilter: %d von %d Artikeln behalten (bester Wert %.1f, Schwelle %.1f)",
              len(kept), len(items), ranked[0]["prefilter"] if ranked else 0, min_value)
     return kept
