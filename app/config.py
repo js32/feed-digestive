@@ -54,6 +54,13 @@ class Settings:
     summary_provider: str = "anthropic"
     summary_model: str = ""
     scoring_batch_size: int = 40
+    # Laya-Vorfilter
+    prefilter: str = "none"  # none | laya
+    prefilter_keep: int = 40
+    prefilter_min: float = 2.0
+    laya_model: str = "multilingual"
+    laya_max_len: int = 1024
+    laya_batch_size: int = 8
     examples_in_prompt: int = 120
 
     # Auswahl / Ausgabe
@@ -100,6 +107,12 @@ class Settings:
             summary_provider=(_env("SUMMARY_PROVIDER", "anthropic") or "").lower(),
             summary_model=_env("SUMMARY_MODEL", "") or "",
             scoring_batch_size=_int("SCORING_BATCH_SIZE", 40),
+            prefilter=(_env("PREFILTER", "none") or "none").lower(),
+            prefilter_keep=_int("PREFILTER_KEEP", 40),
+            prefilter_min=float(_env("PREFILTER_MIN", "2.0") or 2.0),
+            laya_model=_env("LAYA_MODEL", "multilingual") or "multilingual",
+            laya_max_len=_int("LAYA_MAX_LEN", 1024),
+            laya_batch_size=_int("LAYA_BATCH_SIZE", 8),
             examples_in_prompt=_int("EXAMPLES_IN_PROMPT", 120),
             top_n=_int("TOP_N", 10),
             min_score=_int("MIN_SCORE", 6),
@@ -125,8 +138,14 @@ class Settings:
             errors.append("MINIFLUX_URL fehlt")
         if not self.miniflux_token:
             errors.append("MINIFLUX_API_TOKEN fehlt")
+        if self.prefilter not in ("none", "laya"):
+            errors.append("PREFILTER muss 'none' oder 'laya' sein")
+        if self.scoring_provider == "none" and self.prefilter != "laya":
+            errors.append("SCORING_PROVIDER=none geht nur zusammen mit PREFILTER=laya")
         for stage, prov, model in (("SCORING", self.scoring_provider, self.scoring_model),
                                    ("SUMMARY", self.summary_provider, self.summary_model)):
+            if stage == "SCORING" and prov == "none":
+                continue
             if prov not in PROVIDERS:
                 errors.append(f"{stage}_PROVIDER '{prov}' unbekannt (möglich: {', '.join(PROVIDERS)})")
             if not model:

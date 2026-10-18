@@ -99,8 +99,18 @@ def serve(s: Settings) -> None:
 def check(s: Settings) -> None:
     me = Miniflux(s.miniflux_url, s.miniflux_token).me()
     print(f"✓ Miniflux: angemeldet als {me.get('username')}")
+    if s.prefilter == "laya":
+        from .laya_filter import LayaFilter
+        flt = LayaFilter(s.config_dir / "laya_questions.json", model=s.laya_model,
+                         max_len=s.laya_max_len, batch_size=s.laya_batch_size)
+        probe = {"feed": "Test", "title": "New open-weight language model beats GPT on coding benchmarks",
+                 "text": "Researchers released a new open-weight LLM that outperforms larger models on coding tasks."}
+        flt.score([probe])
+        print(f"✓ Laya ({s.laya_model}): Testartikel bekommt {probe['prefilter']}/10 – {probe['prefilter_why']}")
     for stage, prov, model in (("Bewertung", s.scoring_provider, s.scoring_model),
                                ("Auszüge", s.summary_provider, s.summary_model)):
+        if prov == "none":
+            continue
         llm = LLM(prov, model)
         answer = llm.complete("Antworte knapp.", "Sag nur: ok", max_tokens=20)
         print(f"✓ {stage}: {llm} antwortet: {answer.strip()[:40]!r}")

@@ -83,6 +83,38 @@ Bei sehr langsamen Läufen: `MAX_ENTRIES` senken oder `CATEGORY_IDS` setzen.
 10–15 k Eingabe-Token (Profil + 40 Anrisse) und 10 Auszug-Aufrufe mit je ca. 5–8 k Token.
 Mit `EXAMPLES_IN_PROMPT`, `SCORING_BATCH_SIZE` und `CATEGORY_IDS` lässt sich das senken.
 
+## Laya-Vorfilter (lokal, ohne LLM)
+
+[Laya](https://laya.convaiinnovations.com/) ist ein kleines Entscheidungsmodell (ca. 320–420
+Mio. Parameter, Apache 2.0), das Ja/Nein- und Skalenfragen mit Wahrscheinlichkeiten
+beantwortet. Es läuft auf der CPU des VPS, kein Artikel verlässt dafür den Server.
+
+```
+alle neuen Artikel ──► Laya (lokal, Fragenkatalog) ──► Top 40 ──► LLM-Bewertung ──► Top 10 ──► Auszüge
+```
+
+Einrichten:
+```bash
+WITH_LAYA=1 docker compose up -d --build     # Image mit PyTorch-CPU + laya
+# .env: PREFILTER=laya
+docker compose exec digest python -m app check   # lädt beim ersten Mal das Modell (~1 GB nach data/hf)
+docker compose exec digest python -m app dry-run
+```
+
+Die Fragen stehen in `config/laya_questions.json`:
+- `topics`: je Interesse eine Ja/Nein-Frage mit Gewicht (0–1)
+- `depth`: Skala von „Kurzmeldung“ bis „herausragend“
+- `penalties`: Ausschlussgründe (PR, Clickbait …)
+
+Wert = 10 × beste gewichtete Themen-Wahrscheinlichkeit × (0,4 + 0,6 × Tiefe) × (1 − 0,8 × Malus).
+Konkrete, eng gefasste Fragen funktionieren besser als allgemeine. Englische Fragen sind am
+zuverlässigsten, die Artikel selbst dürfen deutsch sein (`LAYA_MODEL=multilingual`).
+
+Varianten:
+- **Laya + LLM** (empfohlen): `PREFILTER=laya`, `SCORING_PROVIDER=…` – das LLM sieht nur noch ~40 Artikel.
+- **Nur Laya**: `SCORING_PROVIDER=none`, `MIN_SCORE=4` – die Bewertung kostet nichts, nur
+  die Auszüge gehen noch an ein LLM (oder an Ollama lokal → komplett ohne Cloud).
+
 ## Interessenprofil anpassen
 
 Das persönliche Profil liegt in `config/` und ist per `.gitignore` vom Repo

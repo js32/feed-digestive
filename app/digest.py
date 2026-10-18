@@ -234,13 +234,28 @@ def run(s: Settings, dry_run: bool = False) -> dict | None:
 
     digest = None
     if items:
+        considered = len(items)
         starred = mf.starred_titles() if s.use_starred else []
         profile = build_profile(s, starred)
-        scorer = LLM(s.scoring_provider, s.scoring_model)
         summarizer = LLM(s.summary_provider, s.summary_model)
-        log.info("Bewerte mit %s, Auszüge mit %s", scorer, summarizer)
 
-        score(items, scorer, profile, s.scoring_batch_size)
+        # Stufe 0 (optional): lokaler Vorfilter mit Laya, schickt nichts nach außen
+        if s.prefilter == "laya":
+            from .laya_filter import LayaFilter, apply_prefilter
+            flt = LayaFilter(s.config_dir / "laya_questions.json", model=s.laya_model,
+                             max_len=s.laya_max_len, batch_size=s.laya_batch_size)
+            items = apply_prefilter(items, flt, s.prefilter_keep, s.prefilter_min)
+
+        # Stufe 1: Bewertung per LLM – oder direkt den Laya-Wert übernehmen
+        if s.scoring_provider == "none":
+            log.info("Bewertung = Laya-Wert, Auszüge mit %s", summarizer)
+            for it in items:
+                it["score"] = round(it.get("prefilter", 0))
+                it["score_why"] = it.get("prefilter_why", "")
+        else:
+            scorer = LLM(s.scoring_provider, s.scoring_model)
+            log.info("Bewerte mit %s, Auszüge mit %s", scorer, summarizer)
+            score(items, scorer, profile, s.scoring_batch_size)
         chosen = select(items, s.top_n, s.min_score)
         log.info("%d Artikel ausgewählt", len(chosen))
 
@@ -252,7 +267,7 @@ def run(s: Settings, dry_run: bool = False) -> dict | None:
             "id": now.strftime("%Y%m%dT%H%M%S"),
             "date": local.strftime("%d.%m.%Y"),
             "generated_at": now.isoformat(),
-            "considered": len(items),
+            "considered": considered,
             "items": [
                 {k: it.get(k) for k in ("digest_title", "title", "url", "feed", "author", "published",
                                         "score", "excerpt", "why", "reading_time")}

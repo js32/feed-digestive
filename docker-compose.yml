@@ -1,11 +1,14 @@
 services:
   digest:
-    build: .
+    build:
+      context: .
+      args:
+        WITH_LAYA: "${WITH_LAYA:-0}"   # 1 = lokaler Laya-Vorfilter
     container_name: rss-digest
     restart: unless-stopped
     env_file: .env
     volumes:
-      - ./data:/data              # Zustand, Digests, feed.xml
+      - ./data:/data              # Zustand, Digests, feed.xml, Laya-Modell (data/hf)
       - ./config:/config:ro       # interests.md, examples.txt (live editierbar)
     ports:
       - "127.0.0.1:8087:8080"     # nur lokal – nginx auf dem Host leitet weiter

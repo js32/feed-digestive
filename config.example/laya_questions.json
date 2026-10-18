@@ -1,0 +1,40 @@
+{
+  "_info": "Fragen für den Laya-Vorfilter. Englisch funktioniert am zuverlässigsten. weight 0–1 = Priorität des Themas.",
+  "topics": {
+    "topic_a": {
+      "label": "Thema A",
+      "weight": 1.0,
+      "question": "Is this article about <your main interest>?"
+    },
+    "topic_b": {
+      "label": "Thema B",
+      "weight": 0.8,
+      "question": "Is this article about <another interest>?"
+    },
+    "curious": {
+      "label": "Food for thought",
+      "weight": 0.6,
+      "question": "Is this a thoughtful personal essay or does it present a surprising, unusual idea or fact?"
+    }
+  },
+  "depth": {
+    "question": "How much depth and original insight does this article offer?",
+    "levels": [
+      "none: a teaser, short news item or advertisement",
+      "little: mostly repeats known facts",
+      "some: useful summary or explanation",
+      "solid: original analysis, research or detailed explanation",
+      "exceptional: outstanding essay or major new finding"
+    ]
+  },
+  "penalties": {
+    "promo": {
+      "label": "PR/Produktnews",
+      "question": "Is this mainly a product announcement, press release, deal, sponsored content or rumour?"
+    },
+    "clickbait": {
+      "label": "Clickbait/Boulevard",
+      "question": "Is this clickbait, or about celebrities, sports results or lifestyle gossip?"
+    }
+  }
+}
