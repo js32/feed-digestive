@@ -41,14 +41,16 @@ def _item_html(it: dict, with_header: bool = True, s: Settings | None = None) ->
         f"Relevanz {it['score']}/10" if it.get("score") is not None else "",
     ) if x)
     orig = it.get("title") or ""
-    orig_html = (f'<br><small>Original: „{escape(orig)}“</small>'
+    orig_html = (f'<br>Original: „{escape(orig)}“'
                  if orig and orig != it.get("digest_title") else "")
     if it.get("explore"):
         title = "🎲 Zufallsfund: " + title
     head = f'<h3><a href="{url}">{title}</a></h3>' if with_header else ""
-    why = f'<p><em>Warum lesen: {escape(it["why"])}</em></p>' if it.get("why") else ""
-    return (f'{head}<p><small>{meta}</small>{orig_html}</p>'
-            f'<p>{escape(it.get("excerpt") or "")}</p>{why}'
+    # Reihenfolge: Titel → warum lesen → Auszug → Kleingedrucktes → Link
+    why = f'<p><strong>Warum lesen:</strong> {escape(it["why"])}</p>' if it.get("why") else ""
+    excerpt = f'<p>{escape(it.get("excerpt") or "")}</p>' if it.get("excerpt") else ""
+    return (f'{head}{why}{excerpt}'
+            f'<p><small>{meta}{orig_html}</small></p>'
             f'<p><a href="{url}">→ Zum Artikel</a></p>')
 
 
@@ -98,7 +100,8 @@ def write_feed(s: Settings, digests: list[dict]) -> None:
                 _el(e, "link", rel="alternate", href=_link(it, s))
                 a = _el(e, "author")
                 _el(a, "name", it.get("feed") or _host(it["url"]))
-                _el(e, "summary", it.get("excerpt") or "")
+                _el(e, "summary", " ".join(x for x in (
+                    f"Warum lesen: {it['why']}" if it.get("why") else "", it.get("excerpt") or "") if x))
                 _el(e, "content", _item_html(it, with_header=False, s=s), type="html")
 
     out = s.data_dir / "feed.xml"
