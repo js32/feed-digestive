@@ -105,8 +105,14 @@ def _make_handler(s: Settings):
 
 
 def serve(s: Settings) -> None:
-    if not (s.data_dir / "feed.xml").exists():
-        write_feed(s, [])  # leerer, aber gültiger Feed zum Abonnieren
+    # Feed beim Start aus den gespeicherten Digests neu schreiben – so greifen Änderungen
+    # an FEED_MODE, Layout oder Titel sofort, nicht erst nach dem nächsten Lauf
+    try:
+        import json
+        digests = json.loads((s.data_dir / "digests.json").read_text(encoding="utf-8"))
+    except (FileNotFoundError, ValueError):
+        digests = []
+    write_feed(s, digests)
     httpd = ThreadingHTTPServer(("0.0.0.0", s.http_port), _make_handler(s))
     threading.Thread(target=httpd.serve_forever, daemon=True).start()
     log.info("Feed erreichbar unter %s (intern Port %d)", s.feed_url, s.http_port)
