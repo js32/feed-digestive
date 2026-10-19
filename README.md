@@ -25,8 +25,8 @@ feed reader ──► dedupe ──► Laya (local, optional) ──► LLM scor
 - **Knows what you like:** an editable interest profile, examples from your reading history and
   the articles you starred.
 - **Sorts locally:** optional sentence embeddings (fastembed, no PyTorch) spot the same story
-  from several sources, group the digest by topic and tell you which of your starred articles a
-  suggestion resembles.
+  from several sources and tell you which of your starred articles a suggestion resembles.
+- **Groups by topic:** the digest comes in sections like "Rechenzentren" or "Gesundheit".
 - **Learns from you:** clicks in the digest and stars in your reader train a small model on top
   of Laya's answers. A 🎲 random pick per digest keeps the filter bubble in check.
 - **Publishes a feed:** one daily digest entry, or one entry per article. Excerpts in the
@@ -159,11 +159,9 @@ turns every candidate into a vector, locally on the CPU in a few seconds. That g
 
 - **One story, one entry:** if two articles tell the same story, e.g. an English and a German
   report on the same event, only the better scored one is kept (`DEDUP_SIMILARITY`).
-- **Topic sections:** similar articles are grouped under a heading. The headings are written by the
-  summary model in one short extra call (titles only). Articles without a group go under
-  "Weitere Themen".
 - **"Ähnlich zu deinem Stern":** each article shows the starred article it most resembles, if any
   is close enough (`SIMILAR_MIN`). Your stars are compared locally and never sent anywhere for this.
+  Every comparison is logged with its value (`Stern-Vergleich 0.61: …`), so you can tune the threshold.
 
 Vectors are cached in `data/embeddings-*.npz`, so articles seen on earlier runs are not recomputed.
 `python -m app check` shows how similar an English and a German version of the same headline are.
@@ -213,6 +211,10 @@ Everything scoring at least `MIN_SCORE` goes in, up to `TOP_N`. If that's fewer 
 the digest is topped up with the next best articles, but never below `FLOOR_SCORE`. Topped-up
 articles are marked with ↓ and "aufgefüllt"; `MIN_ITEMS=0` never tops up. `FEED_MODE=items` turns every
 article into its own feed entry instead of one daily digest.
+
+With `GROUP_TOPICS=true` (default) the summary model sorts the selected articles into a few topic
+sections in one short extra call (titles and "why read" only). Articles that fit no group go under
+"Weitere Themen"; in `FEED_MODE=items` the topic is set as the entry's category.
 
 ## Learning from clicks and stars
 
@@ -291,12 +293,10 @@ The questions Laya asks are in `config/laya_questions.json`.
 
 | Setting | Default | Description |
 |---|---|---|
-| `EMBEDDINGS` | `false` | `true` enables duplicate detection, topic sections and "similar to your stars". Needs an image built with `WITH_EMBEDDINGS=1`. |
+| `EMBEDDINGS` | `false` | `true` enables duplicate detection and "similar to your stars". Needs an image built with `WITH_EMBEDDINGS=1`. |
 | `EMBEDDING_MODEL` | `sentence-transformers/paraphrase-multilingual-MiniLM-L12-v2` | Any [fastembed model](https://qdrant.github.io/fastembed/examples/Supported_Models/). The multilingual default matches stories across languages. |
 | `DEDUP_SIMILARITY` | `0.75` | Similarity (0–1) from which two articles count as the same story. Lower catches more, but may merge different stories on the same subject. |
-| `GROUP_TOPICS` | `true` | Group the digest into topic sections. |
-| `TOPIC_SIMILARITY` | `0.5` | How similar articles must be to share a section. Lower gives bigger, looser groups. |
-| `SIMILAR_MIN` | `0.5` | Show "Ähnlich zu deinem Stern" from this similarity on. `0` turns it off. |
+| `SIMILAR_MIN` | `0.55` | Show "Ähnlich zu deinem Stern" from this similarity on. `0` turns it off. |
 
 ### LLM: scoring and excerpts
 
@@ -336,6 +336,7 @@ API keys and endpoints (only the ones for your provider are needed):
 | `MIN_SCORE` | `6` | Articles scoring at least this (0–10) always go in, up to `TOP_N`. |
 | `MIN_ITEMS` | `5` | Minimum per digest: if fewer reach `MIN_SCORE`, the next best are added and marked as topped up. `0` never tops up. |
 | `FLOOR_SCORE` | `3` | Never top up with articles scoring below this; the digest gets shorter instead. |
+| `GROUP_TOPICS` | `true` | Sort the digest into topic sections (one extra short call to the summary model). |
 | `EXPLORE_SLOTS` | `1` | Slots for a 🎲 random pick from just below the cut-off, against the filter bubble. `0` turns it off. |
 | `EXPLORE_MIN_REGULAR` | `4` | Only add the random pick once at least this many regular articles were selected. |
 

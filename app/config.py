@@ -70,13 +70,12 @@ class Settings:
     laya_model: str = "auto"
     laya_max_len: int = 1024
     laya_batch_size: int = 8
-    # lokale Embeddings: gleiche Geschichten, Themengruppen, Ähnlichkeit zu Sternen
+    # lokale Embeddings: gleiche Geschichten, Ähnlichkeit zu Sternen
     embeddings: bool = False
     embedding_model: str = "sentence-transformers/paraphrase-multilingual-MiniLM-L12-v2"
     dedup_similarity: float = 0.75
     group_topics: bool = True
-    topic_similarity: float = 0.5
-    similar_min: float = 0.5
+    similar_min: float = 0.55
     # Rückmeldung / Lernen
     track_clicks: bool = True
     learn: bool = True
@@ -155,8 +154,7 @@ class Settings:
             embedding_model=_env("EMBEDDING_MODEL", cls.embedding_model) or cls.embedding_model,
             dedup_similarity=float(_env("DEDUP_SIMILARITY", "0.75") or 0.75),
             group_topics=_bool("GROUP_TOPICS", True),
-            topic_similarity=float(_env("TOPIC_SIMILARITY", "0.5") or 0.5),
-            similar_min=float(_env("SIMILAR_MIN", "0.5") or 0.5),
+            similar_min=float(_env("SIMILAR_MIN", "0.55") or 0.55),
             track_clicks=_bool("TRACK_CLICKS", True),
             learn=_bool("LEARN", True),
             feedback_days=_int("FEEDBACK_DAYS", 3),

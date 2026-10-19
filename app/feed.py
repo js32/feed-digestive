@@ -116,7 +116,8 @@ def write_feed(s: Settings, digests: list[dict]) -> None:
         else:
             for it in d["items"]:
                 e = _el(root, "entry")
-                _el(e, "title", it.get("digest_title") or it["title"])
+                mark = "🎲 Zufallsfund: " if it.get("explore") else "↓ " if it.get("filler") else ""
+                _el(e, "title", mark + (it.get("digest_title") or it["title"]))
                 _el(e, "id", _uid(s.feed_url, it["url"]))
                 _el(e, "updated", d["generated_at"])
                 _el(e, "published", d["generated_at"])

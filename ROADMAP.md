@@ -26,7 +26,7 @@ The goal is to send as little about *you* as possible.
 
 - [x] **"Warum lesen" first:** title → why it's worth reading → excerpt → source/reading time/score → link
 - [ ] Table of contents with the one-line "why" next to each title
-- [x] Group articles by topic (AI, health, web tech, …) instead of one flat list (embeddings + LLM headings)
+- [x] Group articles by topic (AI, health, web tech, …) instead of one flat list
 - [ ] Configurable excerpt style: prose (default) or 3 bullet points
 - [ ] Configurable excerpt length (`EXCERPT_SENTENCES`)
 - [x] Mark the 🎲 random pick and topped-up articles (below `MIN_SCORE`) visibly as such

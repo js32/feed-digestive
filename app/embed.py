@@ -1,7 +1,7 @@
 """Optionale lokale Satz-Embeddings (fastembed/ONNX, kein PyTorch).
 
-Damit werden gleiche Geschichten aus verschiedenen Quellen erkannt, der Digest nach Themen
-gruppiert und Artikel mit deinen Stern-Artikeln verglichen. Alles läuft lokal, nichts geht raus.
+Damit werden gleiche Geschichten aus verschiedenen Quellen erkannt und Artikel mit deinen
+Stern-Artikeln verglichen. Alles läuft lokal, nichts geht raus.
 """
 from __future__ import annotations
 
@@ -58,7 +58,10 @@ class Embedder:
         todo = [it for it in items if str(it["id"]) not in self._cache]
         if todo:
             if self._model is None:
+                import warnings
                 from fastembed import TextEmbedding
+                # Hinweis zu Mean Pooling: ist für dieses Modell richtig, nur Log-Rauschen
+                warnings.filterwarnings("ignore", message=".*now uses mean pooling.*")
                 self._model = TextEmbedding(model_name=self.model_name, cache_dir=str(self.model_dir))
             vecs = self.np.array(list(self._model.embed([_text(it) for it in todo])), dtype=self.np.float32)
             vecs /= self.np.linalg.norm(vecs, axis=1, keepdims=True) + 1e-9
@@ -74,24 +77,6 @@ def similarity(a: dict, b: dict) -> float:
     """Kosinus-Ähnlichkeit zweier eingebetteter Artikel, 0 wenn einer keinen Vektor hat."""
     va, vb = a.get("_vec"), b.get("_vec")
     return float(va @ vb) if va is not None and vb is not None else 0.0
-
-
-def cluster(items: list[dict], threshold: float) -> list[list[dict]]:
-    """Fasst ähnliche Artikel zusammen (Average Linkage): zwei Gruppen werden vereint, solange ihre
-    mittlere Ähnlichkeit über threshold liegt. Bei ~10 Artikeln reicht der einfache Weg."""
-    groups = [[it] for it in items]
-    while True:
-        best = None
-        for a in range(len(groups)):
-            for b in range(a + 1, len(groups)):
-                sims = [similarity(x, y) for x in groups[a] for y in groups[b]]
-                s = sum(sims) / len(sims)
-                if s >= threshold and (best is None or s > best[0]):
-                    best = (s, a, b)
-        if best is None:
-            return groups
-        _, a, b = best
-        groups[a] += groups.pop(b)
 
 
 def nearest(item: dict, others: list[dict]) -> tuple[float, dict | None]:
