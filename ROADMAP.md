@@ -21,6 +21,7 @@ The goal is to send as little about *you* as possible.
       with exact timestamps
 - [ ] **Fully local mode** documented end to end (Laya + Ollama), with realistic hardware requirements
 - [ ] Notes per provider on data retention and training opt-out (Mistral, Anthropic, OpenAI, …)
+- [x] `REASONING_EFFORT=none` turns off paid "thinking" tokens on hybrid models (Mistral Small 4, Medium 3.5)
 
 ## Digest layout
 
@@ -36,6 +37,7 @@ The goal is to send as little about *you* as possible.
 - [x] Same story from several sources only once (embedding similarity, `DEDUP_SIMILARITY`)
 - [x] "Similar to your starred article …" next to each suggestion
 - [x] Scoring prompt with a calibrated scale and article length; "why read" without template phrases
+- [x] `python -m app laya-report`: which Laya questions help, overlap, and where Laya and the LLM disagree
 - [ ] Interest profile export: topic clusters + keywords from your stars as TOML/CSV
       (`python -m app profile`), optionally suggesting new `laya_questions.json` topics
 - [ ] Embeddings as learning features, so learning from clicks works without Laya
