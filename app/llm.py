@@ -121,10 +121,19 @@ class LLM:
         # JSON-Modus: zwingt kleine lokale Modelle zu gültigem JSON
         if json_mode and self.provider in ("ollama", "openai", "mistral"):
             body["response_format"] = {"type": "json_object"}
+        # Denkmodus steuern (z. B. Mistral Small 4 / Medium 3.5: "none" oder "high").
+        # Nur senden, wenn gesetzt – Modelle ohne diesen Parameter lehnen ihn ab.
+        effort = os.environ.get("REASONING_EFFORT", "").strip()
+        if effort:
+            body["reasoning_effort"] = effort
         r = self.http.post(f"{self.base_url}/chat/completions", headers=headers, json=body)
         r.raise_for_status()
         data = r.json()
-        return data["choices"][0]["message"]["content"] or ""
+        content = data["choices"][0]["message"]["content"] or ""
+        if isinstance(content, list):  # Denk-Blöcke (type "thinking") verwerfen, nur die Antwort behalten
+            content = "".join(c.get("text", "") for c in content
+                              if isinstance(c, dict) and c.get("type") == "text")
+        return content
 
     # ------------------------------------------------------------------
     def complete_json(self, system: str, user: str, max_tokens: int = 2000):
