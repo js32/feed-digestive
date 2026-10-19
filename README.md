@@ -236,6 +236,22 @@ Two ways to run it:
 - **Laya only**: `SCORING_PROVIDER=none`, `MIN_SCORE=4`. Scoring costs nothing; only the
   excerpts go to an LLM, or to Ollama for a fully offline setup.
 
+**Faster on CPU with ONNX (optional).** `LAYA_BACKEND=onnx` runs the very same Laya weights
+(32-bit, no quantisation) through ONNX Runtime instead of PyTorch. Answers stay identical up to
+rounding; Laya's authors measured about 1.45× on CPU. Export once:
+
+```bash
+docker compose exec digest python -m app laya-export      # --check 10 compares on 10 articles
+```
+
+This downloads the official checkpoint(s), writes `data/laya-onnx/<model>/laya.onnx`
+(~1.3 GB multilingual, ~1.7 GB English; `LAYA_MODEL=auto` exports both), verifies the graph
+against PyTorch and then compares both backends on a few of your unread articles with your own
+questions, including the time per article. The export needs a lot of RAM for a few minutes – raise
+`DIGEST_MEM_LIMIT` temporarily if the container is killed. Then set `LAYA_BACKEND=onnx` and
+restart. int8 quantisation is deliberately not offered: Laya's authors measured a real loss in
+accuracy.
+
 ### Embeddings: duplicates, topics, "similar to your stars"
 
 Enabled with `EMBEDDINGS=true`, and automatically with `PREFILTER=embeddings` (the default image
@@ -414,6 +430,8 @@ Laya only (`PREFILTER=laya`):
 | `LAYA_BATCH_SIZE` | `8` | Articles per forward pass. Lower (e.g. 2) uses less RAM. |
 | `LAYA_THREADS` | `0` | CPU threads for Laya. `0` = the cores this container may use (from the Docker `cpus:` limit). |
 | `LAYA_CHUNK` | `32` | Progress is logged and results are saved every N articles, so an aborted run loses nothing. |
+| `LAYA_BACKEND` | `torch` | `onnx` runs the same Laya weights (fp32) through ONNX Runtime instead of PyTorch – same answers, usually faster on CPU. Needs a one-time `python -m app laya-export` (see below). |
+| `LAYA_ONNX_DIR` | `DATA_DIR/laya-onnx` | Where the exported ONNX files live (one sub-folder per model). |
 | `LAYA_DEVICE` | – | `cpu`, `cuda` or `xpu`. Empty lets Laya choose. |
 
 The questions Laya asks are in `config/laya_questions.json`.
@@ -535,6 +553,7 @@ don't touch.
 | `docker compose exec digest python -m app learn` | show learned weights: from your signals and from the LLM's scores |
 | `docker compose exec digest python -m app privacy-report [days]` | what was sent to LLM providers in the last days (default 30): calls, characters, articles, and which parts of your profile |
 | `docker compose exec digest python -m app opens-report [days]` | evaluate the `OPEN_PIXEL` measurement: does your reader load the image only when you open an entry? |
+| `docker compose exec digest python -m app laya-export [--check N]` | export Laya to ONNX (for `LAYA_BACKEND=onnx`), verify it, and compare PyTorch vs ONNX on N unread articles incl. timing |
 | `docker compose exec digest python -m app laya-report` | evaluate each Laya question against LLM scores, clicks and stars (hit rate, correlation, overlaps, disagreements) |
 | `docker compose exec digest python -m app laya-questions` | write a Laya question catalogue from `interests.md` (never overwrites an existing one) |
 
@@ -603,5 +622,7 @@ please get in touch.
 
 This makes feed-digestive *source available*, not open source in the OSI sense.
 
-Dependencies such as httpx, fastembed, PyTorch and [Laya](https://laya.convaiinnovations.com/)
-(Apache 2.0) are covered by their own licenses and are not part of this repository.
+Dependencies such as httpx, fastembed, PyTorch, ONNX Runtime and [Laya](https://laya.convaiinnovations.com/)
+(Apache 2.0) are covered by their own licenses and are not part of this repository. The one
+exception is `app/vendor/laya_export_onnx.py`, copied unchanged from Laya v0.4.11 and licensed
+under Apache 2.0 as stated in its header.

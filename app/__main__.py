@@ -9,6 +9,7 @@
   python -m app opens-report [Tage]  Pixel-Messung auswerten (OPEN_PIXEL=log)
   python -m app laya-questions  Laya-Fragen aus interests.md erzeugen
   python -m app privacy-report [Tage]  was in den letzten Tagen an LLM-Anbieter ging
+  python -m app laya-export [--check N]  Laya als ONNX-Datei exportieren und mit PyTorch vergleichen
 """
 from __future__ import annotations
 
@@ -224,7 +225,7 @@ def check(s: Settings) -> None:
         probe = {"feed": "Test", "title": "New open-weight language model beats GPT on coding benchmarks",
                  "text": "Researchers released a new open-weight LLM that outperforms larger models on coding tasks."}
         flt.score([probe])
-        print(f"✓ Laya ({s.laya_model}): Testartikel bekommt {probe['prefilter']}/10 – {probe['prefilter_why']}")
+        print(f"✓ Laya ({s.laya_model}, {flt.backend}): Testartikel bekommt {probe['prefilter']}/10 – {probe['prefilter_why']}")
     if s.prefilter == "embeddings":
         from .embed_filter import EmbedFilter
         flt = EmbedFilter(s)
@@ -302,6 +303,11 @@ def main() -> None:
     elif cmd == "privacy-report":
         days = int(sys.argv[2]) if len(sys.argv) > 2 and sys.argv[2].isdigit() else 30
         print(audit.report(s.data_dir, days))
+    elif cmd == "laya-export":
+        from .laya_onnx import export
+        args = sys.argv[2:]
+        n = int(args[args.index("--check") + 1]) if "--check" in args else 5
+        export(s, check=n)
     elif cmd == "laya-report":
         from .laya_report import report
         print(report(s.data_dir, s.config_dir))
