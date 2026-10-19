@@ -52,7 +52,16 @@ class LayaFilter:
         self.model = None if (model or "").lower() == "auto" else model
         self.max_len = max_len
         self.batch_size = batch_size
-        self.router = Router(device=device or os.environ.get("LAYA_DEVICE") or None, max_loaded=1)
+        backend = (os.environ.get("LAYA_BACKEND") or "torch").strip().lower()
+        if backend == "onnx":  # gleiches Modell, schnellere Ausführung (siehe laya_onnx.py)
+            from .laya_onnx import make_router
+            data_dir = Path(os.environ.get("DATA_DIR", "/data"))
+            self.router = make_router(data_dir, max_loaded=1)
+        elif backend == "torch":
+            self.router = Router(device=device or os.environ.get("LAYA_DEVICE") or None, max_loaded=1)
+        else:
+            raise SystemExit(f"LAYA_BACKEND={backend!r} unbekannt – erlaubt: torch, onnx")
+        self.backend = backend
         self.questions = self._build_questions()
 
     # ------------------------------------------------------------------
