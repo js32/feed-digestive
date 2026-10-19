@@ -1,0 +1,455 @@
+<!doctype html>
+<html lang="de">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="robots" content="noindex">
+<title>Digest-Status</title>
+<style>
+:root {
+  --bg: #e9edf1;
+  --paper: #f7f9fb;
+  --ink: #18212c;
+  --muted: #5d6977;
+  --line: #cdd5de;
+  --accent: #2c55c9;
+  --accent-soft: #dbe4fb;
+  --ok: #2a7a57;
+  --warn: #a8670f;
+  --err: #bd3a26;
+  --err-soft: #f8e1dc;
+  --mono: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+  --sans: "Avenir Next", "Segoe UI", system-ui, sans-serif;
+}
+@media (prefers-color-scheme: dark) {
+  :root {
+    --bg: #12171d;
+    --paper: #1a2129;
+    --ink: #e2e8ef;
+    --muted: #93a0ae;
+    --line: #2d3741;
+    --accent: #86a6ff;
+    --accent-soft: #233154;
+    --ok: #5cc493;
+    --warn: #e0a447;
+    --err: #ff8a73;
+    --err-soft: #3d221d;
+  }
+}
+* { box-sizing: border-box; }
+html { -webkit-text-size-adjust: 100%; }
+body {
+  margin: 0;
+  background: var(--bg);
+  color: var(--ink);
+  font: 16px/1.5 var(--sans);
+  font-variant-numeric: tabular-nums;
+}
+a { color: var(--accent); text-underline-offset: 2px; }
+a:focus-visible, button:focus-visible, input:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+.wrap { max-width: 1240px; margin: 0 auto; padding: 32px 24px 48px; }
+
+/* Kopf: der Zustand als Satz */
+header { display: flex; flex-wrap: wrap; gap: 8px 32px; align-items: end; justify-content: space-between; }
+#headline {
+  margin: 0;
+  font-size: clamp(1.9rem, 4.2vw, 3rem);
+  line-height: 1.1;
+  font-weight: 600;
+  letter-spacing: -0.02em;
+  max-width: 22ch;
+}
+#subline { margin: 10px 0 0; color: var(--muted); max-width: 60ch; }
+#subline.err { color: var(--err); }
+.facts { margin: 0; display: grid; grid-template-columns: auto auto; gap: 2px 14px; font-size: 0.9rem; }
+.facts dt { color: var(--muted); }
+.facts dd { margin: 0; }
+
+/* Lauf-Band: die echten Stufen eines Laufs */
+.track {
+  list-style: none;
+  margin: 32px 0 36px;
+  padding: 0;
+  display: grid;
+  grid-template-columns: repeat(6, 1fr);
+  gap: 4px;
+}
+.track li { position: relative; padding-top: 14px; font-size: 0.88rem; color: var(--muted); }
+.track li::before {
+  content: "";
+  position: absolute; top: 0; left: 0; right: 0;
+  height: 6px;
+  border-radius: 3px;
+  background: var(--line);
+}
+.track li.done { color: var(--ink); }
+.track li.done::before { background: var(--ok); }
+.track li.now { color: var(--ink); font-weight: 600; }
+.track li.now::before { background: var(--accent); animation: pulse 1.6s ease-in-out infinite; }
+.track li.fail { color: var(--err); font-weight: 600; }
+.track li.fail::before { background: var(--err); }
+.track small { display: block; font-weight: 400; color: var(--muted); min-height: 1.4em; }
+@keyframes pulse { 50% { opacity: 0.45; } }
+@media (prefers-reduced-motion: reduce) { .track li.now::before { animation: none; } }
+
+/* Zwei Spalten: Digest und Logs */
+main { display: grid; grid-template-columns: minmax(0, 5fr) minmax(0, 7fr); gap: 24px; align-items: start; }
+section { background: var(--paper); border: 1px solid var(--line); border-radius: 10px; }
+section > h2 { margin: 0; padding: 16px 20px 0; font-size: 1.1rem; }
+.note code { overflow-wrap: anywhere; }
+.note { margin: 2px 20px 0; color: var(--muted); font-size: 0.88rem; }
+
+#digest { padding-bottom: 8px; }
+#digest h3 { margin: 18px 20px 4px; font-size: 0.95rem; color: var(--muted); font-weight: 600; }
+#digest ol { list-style: none; margin: 0; padding: 0 20px; }
+#digest li { display: grid; grid-template-columns: 2.2em 1fr; gap: 10px; padding: 10px 0; border-top: 1px solid var(--line); }
+#digest h3 + ol li:first-child { border-top: 0; }
+.score {
+  justify-self: start; align-self: start;
+  min-width: 2em; padding: 1px 0; text-align: center;
+  border-radius: 5px;
+  background: var(--accent-soft); color: var(--accent);
+  font-weight: 700; font-size: 0.9rem;
+}
+.item-title { font-weight: 600; line-height: 1.35; }
+.item-title a { color: inherit; text-decoration-color: var(--line); }
+.item-title a:hover { text-decoration-color: currentColor; }
+.item-why { margin: 3px 0 0; font-size: 0.92rem; }
+.item-meta { margin: 3px 0 0; font-size: 0.82rem; color: var(--muted); }
+
+/* Logs */
+#logs { display: flex; flex-direction: column; }
+.tools { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; padding: 12px 20px; border-bottom: 1px solid var(--line); }
+.seg { display: inline-flex; border: 1px solid var(--line); border-radius: 7px; overflow: hidden; }
+.seg button {
+  font: inherit; font-size: 0.85rem;
+  border: 0; border-left: 1px solid var(--line);
+  padding: 5px 10px; background: transparent; color: var(--ink); cursor: pointer;
+}
+.seg button:first-child { border-left: 0; }
+.seg button[aria-pressed="true"] { background: var(--ink); color: var(--paper); }
+.tools input[type="search"] {
+  flex: 1 1 140px; min-width: 0;
+  font: inherit; font-size: 0.85rem;
+  padding: 5px 10px;
+  border: 1px solid var(--line); border-radius: 7px;
+  background: var(--bg); color: var(--ink);
+}
+.tools label { font-size: 0.85rem; color: var(--muted); display: inline-flex; gap: 6px; align-items: center; }
+#log {
+  margin: 0;
+  height: min(68vh, 760px);
+  overflow: auto;
+  padding: 10px 0;
+  font: 0.8rem/1.55 var(--mono);
+}
+#log .ln { display: grid; grid-template-columns: 5.2em 1fr; gap: 10px; padding: 0 20px; white-space: pre-wrap; word-break: break-word; }
+#log .ln time { color: var(--muted); }
+#log .WARNING { color: var(--warn); }
+#log .ERROR, #log .CRITICAL { color: var(--err); background: var(--err-soft); }
+#log .wait { color: var(--muted); }
+#log .run-start { border-top: 1px dashed var(--line); margin-top: 8px; padding-top: 8px; }
+#log .empty { padding: 0 20px; color: var(--muted); font-family: var(--sans); font-size: 0.9rem; }
+#conn { font-size: 0.82rem; color: var(--muted); margin-left: auto; }
+#conn.off { color: var(--err); }
+
+@media (max-width: 860px) {
+  .wrap { padding: 20px 16px 32px; }
+  main { grid-template-columns: minmax(0, 1fr); }
+  header > div { min-width: 0; }
+  .facts dd { overflow-wrap: anywhere; }
+  .track { grid-template-columns: repeat(3, 1fr); row-gap: 14px; }
+  #log { height: 60vh; }
+}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <div>
+      <h1 id="headline">Status wird geladen …</h1>
+      <p id="subline"></p>
+    </div>
+    <dl class="facts" id="facts"></dl>
+  </header>
+
+  <ol class="track" id="track" aria-label="Stufen des Laufs"></ol>
+
+  <main>
+    <section id="digest" aria-labelledby="digest-h">
+      <h2 id="digest-h">Letzter Digest</h2>
+      <p class="note" id="digest-note"></p>
+      <div id="digest-body"></div>
+    </section>
+
+    <section id="logs" aria-labelledby="logs-h">
+      <h2 id="logs-h">Logs</h2>
+      <p class="note">Seit dem letzten Neustart des Containers. Läufe per <code>docker compose exec … run</code> erscheinen hier nicht.</p>
+      <div class="tools">
+        <div class="seg" role="group" aria-label="Stufe">
+          <button type="button" data-level="all" aria-pressed="true">Alle</button>
+          <button type="button" data-level="WARNING">Warnungen</button>
+          <button type="button" data-level="ERROR">Fehler</button>
+        </div>
+        <input type="search" id="q" placeholder="Suchen" aria-label="Logs durchsuchen">
+        <label><input type="checkbox" id="lastonly"> nur letzter Lauf</label>
+        <label><input type="checkbox" id="hidewait" checked> Wartezeilen ausblenden</label>
+        <label><input type="checkbox" id="follow" checked> mitlaufen</label>
+        <span id="conn"></span>
+      </div>
+      <div id="log" role="log" aria-live="off"></div>
+    </section>
+  </main>
+</div>
+
+<script>
+"use strict";
+const base = location.pathname.replace(/\/$/, "");
+const $ = (id) => document.getElementById(id);
+const el = (tag, cls, text) => {
+  const e = document.createElement(tag);
+  if (cls) e.className = cls;
+  if (text != null) e.textContent = text;
+  return e;
+};
+
+// Stufen eines Laufs – jede beginnt mit der Log-Zeile, die das Programm an dieser Stelle schreibt
+const STAGES = [
+  { name: "Holen", start: null },
+  { name: "Filtern", start: /Einträge aus / },
+  { name: "Bewerten", start: /^Laya: |^Bewerte \d+ Artikel|^Bewertung = Laya/ },
+  { name: "Auswählen", start: /^Embeddings mit |Artikel ausgewählt/ },
+  { name: "Auszüge", start: /Artikel ausgewählt/ },
+  { name: "Feed", start: /nach Themen gruppiert|Keine Themengruppen|Themengruppen fehlgeschlagen/ },
+];
+const DONE = /^Feed aktualisiert/;
+const WAIT = /: warte \d+s \(LLM_MIN_INTERVAL\)$/;
+
+let lines = [], seq = 0, status = null, level = "all";
+
+// ---------- Zeit ----------
+const fmtTime = (iso) => new Date(iso).toLocaleTimeString("de-DE", { hour: "2-digit", minute: "2-digit" });
+function fmtWhen(iso) {
+  if (!iso) return "–";
+  const d = new Date(iso), now = new Date();
+  const day = (x) => new Date(x.getFullYear(), x.getMonth(), x.getDate());
+  const diff = Math.round((day(d) - day(now)) / 864e5);
+  const label = diff === 0 ? "heute" : diff === -1 ? "gestern" : diff === 1 ? "morgen"
+    : d.toLocaleDateString("de-DE", { weekday: "short", day: "numeric", month: "numeric" });
+  return `${label} ${fmtTime(iso)}`;
+}
+function fmtDur(sec) {
+  sec = Math.max(0, Math.round(sec));
+  if (sec < 60) return `${sec} s`;
+  const m = Math.floor(sec / 60);
+  return m < 60 ? `${m} min` : `${Math.floor(m / 60)} h ${m % 60} min`;
+}
+
+// ---------- Stufen aus den Logs ablesen ----------
+function stageOf(runLines) {
+  let idx = 0, detail = "", finished = false;
+  for (const ln of runLines) {
+    STAGES.forEach((st, i) => { if (st.start && i > idx && st.start.test(ln.msg)) idx = i; });
+    if (DONE.test(ln.msg)) finished = true;
+    if (!WAIT.test(ln.msg)) detail = ln.msg;
+  }
+  return { idx, detail, finished };
+}
+const linesFrom = (n) => lines.filter((ln) => ln.n >= n);
+
+function renderTrack(mode, info) {
+  const track = $("track");
+  track.replaceChildren();
+  STAGES.forEach((st, i) => {
+    const li = el("li", "", st.name);
+    let note = "";
+    if (mode === "running") {
+      li.className = i < info.idx ? "done" : i === info.idx ? "now" : "";
+      if (i === info.idx) note = "läuft";
+    } else if (mode === "failed") {
+      li.className = i < info.idx ? "done" : i === info.idx ? "fail" : "";
+      if (i === info.idx) note = "abgebrochen";
+    } else if (mode === "done") {
+      li.className = "done";
+    }
+    li.append(el("small", "", note));
+    track.append(li);
+  });
+}
+
+// ---------- Kopf ----------
+function renderHead() {
+  const s = status;
+  const head = $("headline"), sub = $("subline");
+  sub.className = "";
+  const run = s.running, last = s.last_run;
+
+  if (run) {
+    const info = stageOf(linesFrom(run.first_log));
+    const since = (Date.now() - new Date(run.started)) / 1000;
+    head.textContent = `Läuft seit ${fmtDur(since)}: ${STAGES[info.idx].name}`;
+    const lastLine = linesFrom(run.first_log).at(-1);
+    const w = lastLine && lastLine.msg.match(/^(\w+): warte (\d+)s/);
+    if (w) {
+      const left = Math.max(0, +w[2] - (Date.now() / 1000 - lastLine.t));
+      sub.textContent = `${w[1]} wartet noch ${Math.ceil(left)} s, weil LLM_MIN_INTERVAL einen Abstand zwischen zwei Anfragen erzwingt.`;
+    } else {
+      sub.textContent = info.detail || "Lauf gestartet.";
+    }
+    renderTrack("running", info);
+  } else if (last && !last.ok) {
+    const info = stageOf(linesFrom(last.first_log));
+    head.textContent = "Der letzte Lauf ist fehlgeschlagen";
+    sub.className = "err";
+    sub.textContent = `${fmtWhen(last.ended)} in Stufe „${STAGES[info.idx].name}“: ${last.error}. Details in den Logs, der nächste Lauf startet planmäßig.`;
+    renderTrack("failed", info);
+  } else {
+    const n = s.latest ? s.latest.items.length : 0;
+    head.textContent = s.next_run ? `Ruht bis ${fmtWhen(s.next_run)}` : "Ruht";
+    if (last) {
+      sub.textContent = `Letzter Lauf ${fmtWhen(last.ended)}, dauerte ${fmtDur(last.seconds)}.`;
+    } else if (s.last_run_saved) {
+      sub.textContent = `Letzter Lauf ${fmtWhen(s.last_run_saved)} (vor dem letzten Neustart).`;
+    } else {
+      sub.textContent = "Seit dem Start gab es noch keinen Lauf.";
+    }
+    renderTrack(last || s.last_run_saved ? "done" : "idle");
+  }
+
+  const facts = $("facts");
+  facts.replaceChildren();
+  const add = (k, v) => facts.append(el("dt", "", k), el("dd", "", v));
+  add("Nächster Lauf", fmtWhen(s.next_run));
+  add("Feed geschrieben", fmtWhen(s.feed_updated));
+  add("Bewertung", s.models.scoring);
+  add("Auszüge", s.models.summary);
+  if (s.models.prefilter && s.models.prefilter !== "none") add("Vorfilter", s.models.prefilter);
+}
+
+// ---------- Letzter Digest ----------
+function renderDigest() {
+  const d = status.latest, body = $("digest-body");
+  body.replaceChildren();
+  if (!d) {
+    $("digest-note").textContent = "Noch kein Digest gespeichert. Der erste entsteht beim nächsten Lauf.";
+    return;
+  }
+  $("digest-note").textContent =
+    `${d.date}: ${d.items.length} von ${d.considered ?? "?"} Artikeln ausgewählt, ${status.digest_count} Digests im Feed.`;
+  let group = null, list = null;
+  for (const it of d.items) {
+    const topic = it.topic || "";
+    if (!list || topic !== group) {
+      group = topic;
+      if (topic) body.append(el("h3", "", topic));
+      list = el("ol");
+      body.append(list);
+    }
+    const li = el("li");
+    li.append(el("span", "score", it.score ?? "–"));
+    const text = el("div");
+    const title = el("div", "item-title");
+    const a = el("a", "", (it.explore ? "🎲 " : "") + (it.digest_title || it.title));
+    a.href = it.url;
+    a.rel = "noreferrer";
+    title.append(a);
+    text.append(title);
+    if (it.why) text.append(el("p", "item-why", it.why));
+    const meta = [it.feed];
+    if (it.explore) meta.push("Zufallsfund");
+    if (it.filler) meta.push("Auffüller");
+    if (it.similar_to) meta.push(`ähnlich zu „${it.similar_to}“`);
+    text.append(el("p", "item-meta", meta.filter(Boolean).join(", ")));
+    li.append(text);
+    list.append(li);
+  }
+}
+
+// ---------- Logs ----------
+function visibleLines() {
+  const q = $("q").value.trim().toLowerCase();
+  const lastRun = status && (status.running || status.last_run);
+  const from = $("lastonly").checked && lastRun ? lastRun.first_log : 0;
+  return lines.filter((ln) =>
+    ln.n >= from &&
+    (level === "all" || (level === "WARNING" ? ln.level !== "INFO" && ln.level !== "DEBUG" : ln.level === "ERROR" || ln.level === "CRITICAL")) &&
+    !($("hidewait").checked && WAIT.test(ln.msg)) &&
+    (!q || ln.msg.toLowerCase().includes(q)));
+}
+function renderLog() {
+  const box = $("log");
+  const starts = new Set([status?.running?.first_log, status?.last_run?.first_log].filter(Boolean));
+  const shown = visibleLines();
+  box.replaceChildren();
+  if (!shown.length) {
+    box.append(el("p", "empty", lines.length ? "Keine Zeilen passen zum Filter." : "Noch keine Log-Zeilen."));
+    return;
+  }
+  const frag = document.createDocumentFragment();
+  for (const ln of shown) {
+    const row = el("div", `ln ${ln.level}${WAIT.test(ln.msg) ? " wait" : ""}${starts.has(ln.n) ? " run-start" : ""}`);
+    const t = el("time", "", new Date(ln.t * 1000).toLocaleTimeString("de-DE"));
+    t.title = new Date(ln.t * 1000).toLocaleString("de-DE");
+    row.append(t, el("span", "", ln.msg));
+    frag.append(row);
+  }
+  box.append(frag);
+  if ($("follow").checked) box.scrollTop = box.scrollHeight;
+}
+
+// ---------- Abruf ----------
+async function getJSON(path) {
+  const r = await fetch(base + path, { cache: "no-store" });
+  if (!r.ok) throw new Error(`HTTP ${r.status}`);
+  return r.json();
+}
+function setConn(ok) {
+  $("conn").textContent = ok ? `aktualisiert ${new Date().toLocaleTimeString("de-DE")}` : "Server nicht erreichbar, versuche es weiter";
+  $("conn").className = ok ? "" : "off";
+}
+async function pollLogs() {
+  try {
+    let data = await getJSON(`/logs?after=${seq}`);
+    if (data.seq < seq) {  // Container neu gestartet: Zählung beginnt von vorn
+      lines = [];
+      data = await getJSON("/logs?after=0");
+    }
+    lines = lines.concat(data.lines).slice(-3000);
+    const changed = data.lines.length || !lines.length;
+    seq = data.seq;
+    if (changed) renderLog();
+    setConn(true);
+  } catch { setConn(false); }
+}
+async function pollStatus() {
+  try {
+    const first = !status;
+    status = await getJSON(".json");
+    renderHead();
+    renderDigest();
+    if (first) renderLog();
+    setConn(true);
+  } catch { setConn(false); }
+}
+
+document.querySelectorAll(".seg button").forEach((b) => b.addEventListener("click", () => {
+  level = b.dataset.level;
+  document.querySelectorAll(".seg button").forEach((x) => x.setAttribute("aria-pressed", x === b));
+  renderLog();
+}));
+["q", "lastonly", "hidewait"].forEach((id) => $(id).addEventListener("input", renderLog));
+$("follow").addEventListener("change", renderLog);
+
+(async () => {
+  await pollLogs();
+  await pollStatus();
+  setInterval(pollLogs, 3000);
+  setInterval(pollStatus, 10000);
+  setInterval(() => status && status.running && renderHead(), 1000);
+})();
+</script>
+</body>
+</html>

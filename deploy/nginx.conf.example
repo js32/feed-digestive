@@ -33,6 +33,11 @@ server {
         proxy_set_header Host $host;
         proxy_set_header User-Agent $http_user_agent;
     }
+    # Status-Seite mit Logs: /<token>/status, /<token>/status.json, /<token>/status/logs
+    location ~ ^/[A-Za-z0-9_-]+/status(/|\.json|/logs)?$ {
+        proxy_pass http://127.0.0.1:8087;
+        proxy_set_header Host $host;
+    }
     location = /healthz { proxy_pass http://127.0.0.1:8087; }
     location / { return 404; }
 

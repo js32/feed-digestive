@@ -87,7 +87,7 @@ The first `check` downloads the Laya model (~1 GB) into `data/hf`.
 **Reverse proxy:** the container only listens on `127.0.0.1:8087`. Copy
 `deploy/nginx.conf.example`, replace `digest.example.org` with your domain, get a certificate
 (e.g. `certbot --nginx -d your.domain`) and reload nginx. Only the feed and the click redirects
-are passed through, everything else returns 404.
+are passed through, plus the status page (see below); everything else returns 404.
 
 **Subscribe** to `https://your.domain/<FEED_TOKEN>/feed.xml` in your reader. The digest feed
 itself is automatically excluded from the next digest.
@@ -392,6 +392,13 @@ don't touch.
 | `docker compose exec digest python -m app dry-run` | full run without saving anything |
 | `docker compose exec digest python -m app run` | create a digest now |
 | `docker compose exec digest python -m app learn` | show learned weights |
+
+**Status page:** `https://your.domain/<FEED_TOKEN>/status` shows whether a run is in progress and
+in which stage (including LLM rate-limit waits), when the next run starts, the latest digest with
+scores and topics, and the live log with filters. Like the feed, it is only reachable via the secret
+path. The log covers the container since its last start; runs started with `docker compose exec …
+run` are separate processes and do not appear there. If you set up nginx before this page existed,
+add the `/status` location from `deploy/nginx.conf.example`.
 
 State lives in `data/` as plain files: `state.json` (where the last run stopped), `digests.json`,
 `feed.xml`, the learning logs and the Laya model. Deleting `state.json` makes the next run start
