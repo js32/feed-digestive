@@ -39,10 +39,15 @@ def _item_html(it: dict, with_header: bool = True, s: Settings | None = None) ->
         escape(it.get("feed") or _host(it.get("url") or "")),
         f"{it['reading_time']} min" if it.get("reading_time") else "",
         f"Relevanz {it['score']}/10" if it.get("score") is not None else "",
+        "aufgefüllt (unter MIN_SCORE)" if it.get("filler") else "",
     ) if x)
     orig = it.get("title") or ""
     orig_html = (f'<br>Original: „{escape(orig)}“'
                  if orig and orig != it.get("digest_title") else "")
+    if it.get("similar_to"):
+        orig_html += f'<br>Ähnlich zu deinem Stern: „{escape(it["similar_to"])}“'
+    if it.get("filler"):
+        title = "↓ " + title
     if it.get("explore"):
         title = "🎲 Zufallsfund: " + title
     head = f'<h3><a href="{url}">{title}</a></h3>' if with_header else ""
@@ -54,14 +59,32 @@ def _item_html(it: dict, with_header: bool = True, s: Settings | None = None) ->
             f'<p><a href="{url}">→ Zum Artikel</a></p>')
 
 
+def _sections(items: list[dict]) -> list[tuple[str, list[dict]]]:
+    """Aufeinanderfolgende Artikel mit gleichem Thema als Abschnitt; ohne Themen ein Abschnitt."""
+    out: list[tuple[str, list[dict]]] = []
+    for it in items:
+        topic = it.get("topic") or ""
+        if out and out[-1][0] == topic:
+            out[-1][1].append(it)
+        else:
+            out.append((topic, [it]))
+    return out
+
+
 def _digest_html(d: dict, s: Settings | None = None) -> str:
-    toc = "".join(
-        f'<li><a href="{escape(_link(it, s), quote=True)}">{escape(it.get("digest_title") or it["title"])}</a></li>'
-        for it in d["items"]
-    )
-    body = "<hr>".join(_item_html(it, s=s) for it in d["items"])
+    def toc_item(it):
+        return (f'<li><a href="{escape(_link(it, s), quote=True)}">'
+                f'{escape(it.get("digest_title") or it["title"])}</a></li>')
+
+    toc, body = [], []
+    for topic, items in _sections(d["items"]):
+        head = f"<h2>{escape(topic)}</h2>" if topic else ""
+        toc.append((f"<li>{escape(topic)}<ul>" if topic else "") + "".join(map(toc_item, items))
+                   + ("</ul></li>" if topic else ""))
+        body.append(head + "<hr>".join(_item_html(it, s=s) for it in items))
+    toc_tag = "ul" if any(topic for topic, _ in _sections(d["items"])) else "ol"
     return (f"<p>{len(d['items'])} von {d.get('considered', '?')} neuen Artikeln ausgewählt.</p>"
-            f"<ol>{toc}</ol><hr>{body}")
+            f"<{toc_tag}>{''.join(toc)}</{toc_tag}><hr>{'<hr>'.join(body)}")
 
 
 def _uid(*parts: str) -> str:
@@ -100,6 +123,8 @@ def write_feed(s: Settings, digests: list[dict]) -> None:
                 _el(e, "link", rel="alternate", href=_link(it, s))
                 a = _el(e, "author")
                 _el(a, "name", it.get("feed") or _host(it["url"]))
+                if it.get("topic"):
+                    _el(e, "category", term=it["topic"])
                 _el(e, "summary", " ".join(x for x in (
                     f"Warum lesen: {it['why']}" if it.get("why") else "", it.get("excerpt") or "") if x))
                 _el(e, "content", _item_html(it, with_header=False, s=s), type="html")

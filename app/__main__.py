@@ -144,6 +144,17 @@ def check(s: Settings) -> None:
                  "text": "Researchers released a new open-weight LLM that outperforms larger models on coding tasks."}
         flt.score([probe])
         print(f"✓ Laya ({s.laya_model}): Testartikel bekommt {probe['prefilter']}/10 – {probe['prefilter_why']}")
+    if s.embeddings:
+        try:
+            from .embed import Embedder, similarity
+        except ImportError:
+            raise SystemExit("✗ Embeddings: fastembed fehlt – Image mit WITH_EMBEDDINGS=1 bauen")
+        emb = Embedder(s.embedding_model, s.data_dir)
+        a = {"id": "check-a", "title": "AI error almost triggered a military strike", "text": ""}
+        b = {"id": "check-b", "title": "KI-Fehler hätte fast einen Militärschlag ausgelöst", "text": ""}
+        emb.embed([a, b])
+        print(f"✓ Embeddings ({emb}): englische und deutsche Meldung {similarity(a, b):.2f} ähnlich "
+              f"(gleiche Geschichte ab DEDUP_SIMILARITY={s.dedup_similarity})")
     for stage, prov, model in (("Bewertung", s.scoring_provider, s.scoring_model),
                                ("Auszüge", s.summary_provider, s.summary_model)):
         if prov == "none":

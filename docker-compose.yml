@@ -22,6 +22,8 @@ services:
       args:
         # 1 = Image mit Laya-Vorfilter (PyTorch-CPU, ca. +1 GB), 0 = schlank ohne Laya
         WITH_LAYA: "${WITH_LAYA:-1}"
+        # 1 = lokale Embeddings (Duplikate, Themengruppen, Stern-Vergleich), aktivieren mit EMBEDDINGS=true
+        WITH_EMBEDDINGS: "${WITH_EMBEDDINGS:-1}"
     image: feed-digestive:local
     container_name: feed-digestive
     restart: unless-stopped

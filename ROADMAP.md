@@ -26,10 +26,19 @@ The goal is to send as little about *you* as possible.
 
 - [x] **"Warum lesen" first:** title → why it's worth reading → excerpt → source/reading time/score → link
 - [ ] Table of contents with the one-line "why" next to each title
-- [ ] Group articles by topic (AI, health, web tech, …) instead of one flat list
+- [x] Group articles by topic (AI, health, web tech, …) instead of one flat list (embeddings + LLM headings)
 - [ ] Configurable excerpt style: prose (default) or 3 bullet points
 - [ ] Configurable excerpt length (`EXCERPT_SENTENCES`)
-- [ ] Mark the 🎲 random pick and topped-up articles (below `MIN_SCORE`) visibly as such
+- [x] Mark the 🎲 random pick and topped-up articles (below `MIN_SCORE`) visibly as such
+
+## Selection quality
+
+- [x] Same story from several sources only once (embedding similarity, `DEDUP_SIMILARITY`)
+- [x] "Similar to your starred article …" next to each suggestion
+- [x] Scoring prompt with a calibrated scale and article length; "why read" without template phrases
+- [ ] Interest profile export: topic clusters + keywords from your stars as TOML/CSV
+      (`python -m app profile`), optionally suggesting new `laya_questions.json` topics
+- [ ] Embeddings as learning features, so learning from clicks works without Laya
 
 ## Performance
 

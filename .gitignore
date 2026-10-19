@@ -4,3 +4,5 @@ data/
 config/
 __pycache__/
 ollama/
+.DS_Store
+miniflux-sommelier/
