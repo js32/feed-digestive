@@ -396,8 +396,9 @@ don't touch.
 **Status page:** `https://your.domain/<FEED_TOKEN>/status` shows whether a run is in progress and
 in which stage (including LLM rate-limit waits), when the next run starts, the latest digest with
 scores and topics, and the live log with filters. Like the feed, it is only reachable via the secret
-path. The log covers the container since its last start; runs started with `docker compose exec …
-run` are separate processes and do not appear there. If you set up nginx before this page existed,
+path. Scheduled runs and runs started with `docker compose exec … run` both show up there; logs
+are kept in `data/status/` and survive restarts. Both kinds of run share a lock, so a manual run
+never overlaps with the scheduled one. If you set up nginx before this page existed,
 add the `/status` location from `deploy/nginx.conf.example`.
 
 State lives in `data/` as plain files: `state.json` (where the last run stopped), `digests.json`,

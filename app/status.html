@@ -68,32 +68,52 @@ header { display: flex; flex-wrap: wrap; gap: 8px 32px; align-items: end; justif
 .facts dt { color: var(--muted); }
 .facts dd { margin: 0; }
 
-/* Lauf-Band: die echten Stufen eines Laufs */
-.track {
+/* Ablauf eines Laufs: Stufen mit Ergebnis */
+#run { margin: 28px 0 24px; padding-bottom: 20px; }
+#run-caption { margin: 2px 20px 0; color: var(--muted); font-size: 0.88rem; }
+.steps {
   list-style: none;
-  margin: 32px 0 36px;
-  padding: 0;
+  margin: 18px 0 0;
+  padding: 0 20px;
   display: grid;
-  grid-template-columns: repeat(6, 1fr);
-  gap: 4px;
+  grid-template-columns: repeat(6, minmax(0, 1fr));
+  gap: 0 8px;
+  counter-reset: step;
 }
-.track li { position: relative; padding-top: 14px; font-size: 0.88rem; color: var(--muted); }
-.track li::before {
+.steps li { position: relative; counter-increment: step; }
+.dot {
+  position: relative; z-index: 1;
+  display: grid; place-items: center;
+  width: 30px; height: 30px;
+  border-radius: 50%;
+  border: 2px solid var(--line);
+  background: var(--paper);
+  color: var(--muted);
+  font-size: 0.82rem; font-weight: 700;
+}
+.dot::before { content: counter(step); }
+/* Verbindungslinie zum nächsten Schritt */
+.steps li:not(:last-child)::after {
   content: "";
-  position: absolute; top: 0; left: 0; right: 0;
-  height: 6px;
-  border-radius: 3px;
+  position: absolute; top: 14px; left: 38px; right: -2px;
+  height: 2px; border-radius: 1px;
   background: var(--line);
 }
-.track li.done { color: var(--ink); }
-.track li.done::before { background: var(--ok); }
-.track li.now { color: var(--ink); font-weight: 600; }
-.track li.now::before { background: var(--accent); animation: pulse 1.6s ease-in-out infinite; }
-.track li.fail { color: var(--err); font-weight: 600; }
-.track li.fail::before { background: var(--err); }
-.track small { display: block; font-weight: 400; color: var(--muted); min-height: 1.4em; }
-@keyframes pulse { 50% { opacity: 0.45; } }
-@media (prefers-reduced-motion: reduce) { .track li.now::before { animation: none; } }
+.step-name { margin-top: 8px; font-weight: 600; font-size: 0.92rem; color: var(--muted); }
+.step-result { font-size: 0.84rem; color: var(--muted); min-height: 1.3em; overflow-wrap: anywhere; }
+
+.steps li.done .dot { border-color: var(--ok); background: var(--ok); color: var(--paper); }
+.steps li.done .dot::before { content: "✓"; }
+.steps li.done::after { background: var(--ok); }
+.steps li.done .step-name { color: var(--ink); }
+.steps li.now .dot { border-color: var(--accent); color: var(--accent); box-shadow: 0 0 0 4px var(--accent-soft); animation: pulse 1.6s ease-in-out infinite; }
+.steps li.now .step-name { color: var(--accent); }
+.steps li.now .step-result { color: var(--ink); }
+.steps li.fail .dot { border-color: var(--err); background: var(--err); color: var(--paper); }
+.steps li.fail .dot::before { content: "✕"; }
+.steps li.fail .step-name, .steps li.fail .step-result { color: var(--err); }
+@keyframes pulse { 50% { box-shadow: 0 0 0 7px var(--accent-soft); } }
+@media (prefers-reduced-motion: reduce) { .steps li.now .dot { animation: none; } }
 
 /* Zwei Spalten: Digest und Logs */
 main { display: grid; grid-template-columns: minmax(0, 5fr) minmax(0, 7fr); gap: 24px; align-items: start; }
@@ -161,7 +181,11 @@ section > h2 { margin: 0; padding: 16px 20px 0; font-size: 1.1rem; }
   main { grid-template-columns: minmax(0, 1fr); }
   header > div { min-width: 0; }
   .facts dd { overflow-wrap: anywhere; }
-  .track { grid-template-columns: repeat(3, 1fr); row-gap: 14px; }
+  .steps { grid-template-columns: minmax(0, 1fr); }
+  .steps li { display: grid; grid-template-columns: 30px minmax(0, 1fr); column-gap: 12px; padding-bottom: 14px; }
+  .steps li .dot { grid-row: span 2; }
+  .step-name { margin-top: 4px; }
+  .steps li:not(:last-child)::after { top: 34px; bottom: 2px; left: 14px; right: auto; width: 2px; height: auto; }
   #log { height: 60vh; }
 }
 </style>
@@ -176,7 +200,11 @@ section > h2 { margin: 0; padding: 16px 20px 0; font-size: 1.1rem; }
     <dl class="facts" id="facts"></dl>
   </header>
 
-  <ol class="track" id="track" aria-label="Stufen des Laufs"></ol>
+  <section id="run" aria-labelledby="run-h">
+    <h2 id="run-h">Letzter Lauf</h2>
+    <p id="run-caption"></p>
+    <ol class="steps" id="steps"></ol>
+  </section>
 
   <main>
     <section id="digest" aria-labelledby="digest-h">
@@ -187,7 +215,7 @@ section > h2 { margin: 0; padding: 16px 20px 0; font-size: 1.1rem; }
 
     <section id="logs" aria-labelledby="logs-h">
       <h2 id="logs-h">Logs</h2>
-      <p class="note">Seit dem letzten Neustart des Containers. Läufe per <code>docker compose exec … run</code> erscheinen hier nicht.</p>
+      <p class="note">Geplante Läufe und solche per <code>docker compose exec … run</code>, auch über Neustarts hinweg.</p>
       <div class="tools">
         <div class="seg" role="group" aria-label="Stufe">
           <button type="button" data-level="all" aria-pressed="true">Alle</button>
@@ -216,22 +244,30 @@ const el = (tag, cls, text) => {
   return e;
 };
 
-// Stufen eines Laufs – jede beginnt mit der Log-Zeile, die das Programm an dieser Stelle schreibt
+// Stufen eines Laufs – jede beginnt mit der Log-Zeile, die das Programm an dieser Stelle schreibt,
+// result liest das Ergebnis der Stufe aus ihren Log-Zeilen
 const STAGES = [
-  { name: "Holen", start: null },
-  { name: "Filtern", start: /Einträge aus / },
-  { name: "Bewerten", start: /^Laya: |^Bewerte \d+ Artikel|^Bewertung = Laya/ },
-  { name: "Auswählen", start: /^Embeddings mit |Artikel ausgewählt/ },
-  { name: "Auszüge", start: /Artikel ausgewählt/ },
-  { name: "Feed", start: /nach Themen gruppiert|Keine Themengruppen|Themengruppen fehlgeschlagen/ },
+  { name: "Holen", start: null,
+    result: (m) => (m = m.match(/^(\d+) (?:ungelesene|neue) Einträge/)) && `${m[1]} Artikel geholt` },
+  { name: "Filtern", start: /Einträge aus /,
+    result: (m) => (m = m.match(/^(\d+) nach Filter\/Deduplizierung \((\d+)/)) && `${m[1]} übrig, ${m[2]} schon gezeigt` },
+  { name: "Bewerten", start: /^Laya: |^Bewerte \d+ Artikel|^Bewertung = Laya/,
+    result: (m) => (m = m.match(/^Bewerte (\d+) Artikel .*\((\d+) aus früheren/)) && `${m[1]} neu, ${m[2]} gemerkt` },
+  { name: "Auswählen", start: /^Embeddings mit |Artikel ausgewählt/,
+    result: (m) => (m = m.match(/^(\d+) Artikel ausgewählt/)) && `${m[1]} Artikel` },
+  { name: "Auszüge & Themen", start: /Artikel ausgewählt/,
+    result: (m) => /^Keine Themengruppen|^Themengruppen fehlgeschlagen/.test(m) ? "ohne Themen"
+      : (m = m.match(/^Digest nach Themen gruppiert: (.*)$/)) && `${m[1].split("), ").length} Themen` },
+  { name: "Feed", start: /nach Themen gruppiert|Keine Themengruppen|Themengruppen fehlgeschlagen/,
+    result: (m, ln) => /^Feed aktualisiert/.test(m) && `aktualisiert ${fmtTime(new Date(ln.t * 1000))}` },
 ];
 const DONE = /^Feed aktualisiert/;
 const WAIT = /: warte \d+s \(LLM_MIN_INTERVAL\)$/;
 
-let lines = [], seq = 0, status = null, level = "all";
+let lines = [], seq = 0, gen = 0, status = null, level = "all";
 
 // ---------- Zeit ----------
-const fmtTime = (iso) => new Date(iso).toLocaleTimeString("de-DE", { hour: "2-digit", minute: "2-digit" });
+const fmtTime = (d) => new Date(d).toLocaleTimeString("de-DE", { hour: "2-digit", minute: "2-digit" });
 function fmtWhen(iso) {
   if (!iso) return "–";
   const d = new Date(iso), now = new Date();
@@ -251,32 +287,39 @@ function fmtDur(sec) {
 // ---------- Stufen aus den Logs ablesen ----------
 function stageOf(runLines) {
   let idx = 0, detail = "", finished = false;
+  const results = [];
   for (const ln of runLines) {
-    STAGES.forEach((st, i) => { if (st.start && i > idx && st.start.test(ln.msg)) idx = i; });
+    STAGES.forEach((st, i) => {
+      if (st.start && i > idx && st.start.test(ln.msg)) idx = i;
+      const r = st.result(ln.msg, ln);
+      if (r) results[i] = r;
+    });
     if (DONE.test(ln.msg)) finished = true;
     if (!WAIT.test(ln.msg)) detail = ln.msg;
   }
-  return { idx, detail, finished };
+  return { idx, detail, finished, results };
 }
-const linesFrom = (n) => lines.filter((ln) => ln.n >= n);
+// Zeilen eines Laufs – nur solange die Log-Datei seit Laufbeginn nicht umbenannt wurde
+const linesFrom = (run) => run && run.gen === gen ? lines.filter((ln) => ln.n >= run.first_log) : [];
+const by = (run) => run.source === "Befehl" ? " per Befehl" : "";
 
-function renderTrack(mode, info) {
-  const track = $("track");
-  track.replaceChildren();
+function renderSteps(mode, info, title, caption) {
+  $("run-h").textContent = title;
+  $("run-caption").textContent = caption;
+  const results = (info && info.results) || [];
+  const list = $("steps");
+  list.replaceChildren();
   STAGES.forEach((st, i) => {
-    const li = el("li", "", st.name);
-    let note = "";
-    if (mode === "running") {
-      li.className = i < info.idx ? "done" : i === info.idx ? "now" : "";
-      if (i === info.idx) note = "läuft";
-    } else if (mode === "failed") {
-      li.className = i < info.idx ? "done" : i === info.idx ? "fail" : "";
-      if (i === info.idx) note = "abgebrochen";
-    } else if (mode === "done") {
-      li.className = "done";
+    let cls = "", result = results[i] || "";
+    if (mode === "done") cls = "done";
+    else if (mode === "running" || mode === "failed") {
+      cls = i < info.idx ? "done" : i === info.idx ? (mode === "running" ? "now" : "fail") : "";
+      if (i === info.idx && !result) result = mode === "running" ? "läuft gerade" : "hier abgebrochen";
     }
-    li.append(el("small", "", note));
-    track.append(li);
+    const li = el("li", cls);
+    if (cls === "now") li.setAttribute("aria-current", "step");
+    li.append(el("span", "dot"), el("div", "step-name", st.name), el("div", "step-result", result));
+    list.append(li);
   });
 }
 
@@ -288,35 +331,42 @@ function renderHead() {
   const run = s.running, last = s.last_run;
 
   if (run) {
-    const info = stageOf(linesFrom(run.first_log));
+    const runLines = linesFrom(run);
+    const info = stageOf(runLines);
     const since = (Date.now() - new Date(run.started)) / 1000;
     head.textContent = `Läuft seit ${fmtDur(since)}: ${STAGES[info.idx].name}`;
-    const lastLine = linesFrom(run.first_log).at(-1);
+    const lastLine = runLines.at(-1);
     const w = lastLine && lastLine.msg.match(/^(\w+): warte (\d+)s/);
     if (w) {
       const left = Math.max(0, +w[2] - (Date.now() / 1000 - lastLine.t));
       sub.textContent = `${w[1]} wartet noch ${Math.ceil(left)} s, weil LLM_MIN_INTERVAL einen Abstand zwischen zwei Anfragen erzwingt.`;
     } else {
-      sub.textContent = info.detail || "Lauf gestartet.";
+      sub.textContent = (info.detail || "Lauf gestartet") + (by(run) ? ` (${by(run).trim()})` : "");
     }
-    renderTrack("running", info);
+    renderSteps("running", info, "Aktueller Lauf",
+      `Gestartet ${fmtWhen(run.started)}${by(run)}. Die blau markierte Stufe läuft gerade.`);
   } else if (last && !last.ok) {
-    const info = stageOf(linesFrom(last.first_log));
+    const info = stageOf(linesFrom(last));
     head.textContent = "Der letzte Lauf ist fehlgeschlagen";
     sub.className = "err";
-    sub.textContent = `${fmtWhen(last.ended)} in Stufe „${STAGES[info.idx].name}“: ${last.error}. Details in den Logs, der nächste Lauf startet planmäßig.`;
-    renderTrack("failed", info);
+    sub.textContent = `${fmtWhen(last.ended || last.started)} in Stufe „${STAGES[info.idx].name}“${by(last) ? ` (${by(last).trim()})` : ""}: ${last.error}. Details in den Logs, der nächste Lauf startet planmäßig.`;
+    renderSteps("failed", info, "Letzter Lauf",
+      `Gestartet ${fmtWhen(last.started)}${by(last)}, in der rot markierten Stufe abgebrochen.`);
   } else {
     const n = s.latest ? s.latest.items.length : 0;
     head.textContent = s.next_run ? `Ruht bis ${fmtWhen(s.next_run)}` : "Ruht";
+    sub.textContent = last || s.last_run_saved
+      ? `Der letzte Lauf ist ohne Fehler durchgelaufen${n ? ` und hat ${n} Artikel in den Digest gebracht` : ""}.`
+      : "Bisher gab es noch keinen Lauf.";
     if (last) {
-      sub.textContent = `Letzter Lauf ${fmtWhen(last.ended)}, dauerte ${fmtDur(last.seconds)}.`;
-    } else if (s.last_run_saved) {
-      sub.textContent = `Letzter Lauf ${fmtWhen(s.last_run_saved)} (vor dem letzten Neustart).`;
+      const info = stageOf(linesFrom(last));
+      renderSteps("done", info, "Letzter Lauf",
+        `${fmtWhen(last.started)}${by(last)} gestartet, alle Stufen erledigt in ${fmtDur(last.seconds)}.`);
     } else {
-      sub.textContent = "Seit dem Start gab es noch keinen Lauf.";
+      renderSteps(s.last_run_saved ? "done" : "idle", null, "Letzter Lauf",
+        s.last_run_saved ? `${fmtWhen(s.last_run_saved)}, Details liegen nicht mehr in den Logs.`
+          : "Noch kein Lauf aufgezeichnet. Die Stufen füllen sich beim nächsten Lauf.");
     }
-    renderTrack(last || s.last_run_saved ? "done" : "idle");
   }
 
   const facts = $("facts");
@@ -372,7 +422,7 @@ function renderDigest() {
 function visibleLines() {
   const q = $("q").value.trim().toLowerCase();
   const lastRun = status && (status.running || status.last_run);
-  const from = $("lastonly").checked && lastRun ? lastRun.first_log : 0;
+  const from = $("lastonly").checked && lastRun && lastRun.gen === gen ? lastRun.first_log : 0;
   return lines.filter((ln) =>
     ln.n >= from &&
     (level === "all" || (level === "WARNING" ? ln.level !== "INFO" && ln.level !== "DEBUG" : ln.level === "ERROR" || ln.level === "CRITICAL")) &&
@@ -381,7 +431,8 @@ function visibleLines() {
 }
 function renderLog() {
   const box = $("log");
-  const starts = new Set([status?.running?.first_log, status?.last_run?.first_log].filter(Boolean));
+  const starts = new Set([status?.running, status?.last_run]
+    .filter((r) => r && r.gen === gen).map((r) => r.first_log));
   const shown = visibleLines();
   box.replaceChildren();
   if (!shown.length) {
@@ -412,14 +463,13 @@ function setConn(ok) {
 }
 async function pollLogs() {
   try {
-    let data = await getJSON(`/logs?after=${seq}`);
-    if (data.seq < seq) {  // Container neu gestartet: Zählung beginnt von vorn
-      lines = [];
-      data = await getJSON("/logs?after=0");
-    }
+    const data = await getJSON(`/logs?after=${seq}&gen=${gen}`);
+    const fresh = data.gen !== gen;  // Log-Datei wurde umbenannt: von vorn
+    if (fresh) lines = [];
     lines = lines.concat(data.lines).slice(-3000);
-    const changed = data.lines.length || !lines.length;
+    const changed = fresh || data.lines.length;
     seq = data.seq;
+    gen = data.gen;
     if (changed) renderLog();
     setConn(true);
   } catch { setConn(false); }
@@ -430,7 +480,7 @@ async function pollStatus() {
     status = await getJSON(".json");
     renderHead();
     renderDigest();
-    if (first) renderLog();
+    if (first || status.running) renderLog();
     setConn(true);
   } catch { setConn(false); }
 }

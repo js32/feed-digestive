@@ -28,28 +28,21 @@ from .llm import LLM, LLMError
 from .sources import make_source
 
 log = logging.getLogger("feed-digestive")
-_lock = threading.Lock()
-_logs = status.LogBuffer()
-_runs = status.RunTracker(_logs)
 
 
-def _run_safely(s: Settings) -> None:
-    if not _lock.acquire(blocking=False):
-        log.warning("Lauf läuft bereits – übersprungen")
-        return
-    _runs.start()
-    error = None
+def _run_safely(s: Settings, source: str = "Zeitplan") -> bool:
+    """Ein Lauf mit Sperre und Eintrag für die Status-Seite – auch für `run` aus der Shell."""
     try:
-        run(s)
+        with status.tracked(s, source):
+            run(s)
+        return True
+    except status.RunBusy:
+        log.warning("Lauf läuft bereits – übersprungen")
     except SystemExit as e:
-        error = str(e)
         log.error("%s", e)
-    except Exception as e:
-        error = f"{type(e).__name__}: {e}"
+    except Exception:
         log.exception("Lauf fehlgeschlagen")
-    finally:
-        _runs.finish(error)
-        _lock.release()
+    return False
 
 
 def _next_run(s: Settings) -> datetime:
@@ -81,11 +74,10 @@ def _make_handler(s: Settings):
             if path in (status_path, status_path + "/"):
                 return self._send(200, status.PAGE.read_bytes(), "text/html; charset=utf-8", cache=False)
             if path == status_path + ".json":
-                return self._json(status.snapshot(s, _runs))
+                return self._json(status.snapshot(s))
             if path == status_path + "/logs":
-                after = re.search(r"(?:^|&)after=(\d+)", query)
-                return self._json({"lines": _logs.since(int(after.group(1)) if after else 0),
-                                   "seq": _logs.seq})
+                q = dict(re.findall(r"(?:^|&)(after|gen)=(\d+)", query))
+                return self._json(status.read_log(s.data_dir, int(q.get("after", 0)), int(q.get("gen", 0))))
             m = redirect_re.match(path)
             if m:
                 entry_id = m.group(1)
@@ -136,6 +128,7 @@ def serve(s: Settings) -> None:
     except (FileNotFoundError, ValueError):
         digests = []
     write_feed(s, digests)
+    status.rotate_log(s.data_dir)
     httpd = ThreadingHTTPServer(("0.0.0.0", s.http_port), _make_handler(s))
     threading.Thread(target=httpd.serve_forever, daemon=True).start()
     log.info("Feed erreichbar unter %s (intern Port %d)", s.feed_url, s.http_port)
@@ -144,11 +137,11 @@ def serve(s: Settings) -> None:
         _run_safely(s)
     while True:
         nxt = _next_run(s)
-        _runs.next_run = nxt
+        status.next_run = nxt
         log.info("Nächster Lauf: %s", nxt.strftime("%d.%m.%Y %H:%M %Z"))
         while (remaining := (nxt - datetime.now(nxt.tzinfo)).total_seconds()) > 0:
             time.sleep(min(remaining, 300))
-        _runs.next_run = None
+        status.next_run = None
         _run_safely(s)
 
 
@@ -197,13 +190,14 @@ def check(s: Settings) -> None:
 def main() -> None:
     logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s")
     logging.getLogger("httpx").setLevel(logging.WARNING)
-    logging.getLogger().addHandler(_logs)
     cmd = sys.argv[1] if len(sys.argv) > 1 else "serve"
     s = Settings.from_env()
+    logging.getLogger().addHandler(status.FileLog(s.data_dir))
     if cmd == "serve":
         serve(s)
     elif cmd == "run":
-        run(s)
+        if not _run_safely(s, "Befehl"):
+            sys.exit(1)
     elif cmd == "dry-run":
         run(s, dry_run=True)
     elif cmd == "check":
