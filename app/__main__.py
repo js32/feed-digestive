@@ -5,6 +5,7 @@
   python -m app dry-run   einmal ausführen, Ergebnis nur anzeigen (nichts speichern)
   python -m app check     Verbindung zu Feedreader und LLMs testen
   python -m app learn     zeigen, was aus Klicks und Sternen gelernt wurde
+  python -m app laya-report  auswerten, welche Laya-Fragen etwas taugen
 """
 from __future__ import annotations
 
@@ -214,6 +215,9 @@ def main() -> None:
             labels["depth"] = "Tiefe"
             labels.update({f"penalty_{k}": "Malus " + v.get("label", k) for k, v in spec.get("penalties", {}).items()})
         print(describe(s.data_dir, s.feedback_days, labels))
+    elif cmd == "laya-report":
+        from .laya_report import report
+        print(report(s.data_dir, s.config_dir))
     else:
         print(__doc__)
         sys.exit(2)

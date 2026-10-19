@@ -234,6 +234,7 @@ feed-digestive learns what you actually read, and keeps that knowledge on your s
 
 ```bash
 docker compose exec digest python -m app learn    # show what it has learned
+docker compose exec digest python -m app laya-report   # which Laya questions actually help
 ```
 
 Data is kept in `data/history.jsonl` and `data/feedback.jsonl` for 180 days. Set
@@ -393,6 +394,7 @@ don't touch.
 | `docker compose exec digest python -m app dry-run` | full run without saving anything |
 | `docker compose exec digest python -m app run` | create a digest now |
 | `docker compose exec digest python -m app learn` | show learned weights |
+| `docker compose exec digest python -m app laya-report` | evaluate each Laya question against LLM scores, clicks and stars (hit rate, correlation, overlaps, disagreements) |
 
 **Status page:** `https://your.domain/<FEED_TOKEN>/status` shows whether a run is in progress and
 in which stage (including LLM rate-limit waits), when the next run starts, the latest digest with
