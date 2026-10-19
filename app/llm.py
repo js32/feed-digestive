@@ -124,9 +124,15 @@ class LLM:
         # Denkmodus steuern (z. B. Mistral Small 4 / Medium 3.5: "none" oder "high").
         # Nur senden, wenn gesetzt – Modelle ohne diesen Parameter lehnen ihn ab.
         effort = os.environ.get("REASONING_EFFORT", "").strip()
-        if effort:
+        if effort and not getattr(self, "_no_reasoning", False):
             body["reasoning_effort"] = effort
         r = self.http.post(f"{self.base_url}/chat/completions", headers=headers, json=body)
+        if r.status_code in (400, 422) and "reasoning_effort" in body:
+            # Modell kennt den Parameter nicht -> ohne ihn wiederholen und merken
+            log.info("%s: reasoning_effort nicht unterstützt, wird für dieses Modell weggelassen", self)
+            self._no_reasoning = True
+            body.pop("reasoning_effort")
+            r = self.http.post(f"{self.base_url}/chat/completions", headers=headers, json=body)
         r.raise_for_status()
         data = r.json()
         content = data["choices"][0]["message"]["content"] or ""
