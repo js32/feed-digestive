@@ -399,7 +399,13 @@ in which stage (including LLM rate-limit waits), when the next run starts, the l
 scores and topics, and the live log with filters. Like the feed, it is only reachable via the secret
 path. Scheduled runs and runs started with `docker compose exec … run` both show up there; logs
 are kept in `data/status/` and survive restarts. Both kinds of run share a lock, so a manual run
-never overlaps with the scheduled one. If you set up nginx before this page existed,
+never overlaps with the scheduled one. Click the status badge (or open `…/status#dienste`) to check
+each service: feed reader login, both LLM providers (via their model list, which costs no tokens;
+skipped while a run is active), Laya, embeddings, feed file age, disk space and errors in the last
+24 hours.
+
+To keep the page private, skip the nginx location and open it through an SSH tunnel instead:
+`ssh -N -L 8087:127.0.0.1:8087 user@server`, then `http://localhost:8087/<FEED_TOKEN>/status`. If you set up nginx before this page existed,
 add the `/status` location from `deploy/nginx.conf.example`.
 
 State lives in `data/` as plain files: `state.json` (where the last run stopped), `digests.json`,

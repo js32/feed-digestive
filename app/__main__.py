@@ -75,6 +75,8 @@ def _make_handler(s: Settings):
                 return self._send(200, status.PAGE.read_bytes(), "text/html; charset=utf-8", cache=False)
             if path == status_path + ".json":
                 return self._json(status.snapshot(s))
+            if path == status_path + "/health":
+                return self._json(status.health(s, force="force=1" in query))
             if path == status_path + "/logs":
                 q = dict(re.findall(r"(?:^|&)(after|gen)=(\d+)", query))
                 return self._json(status.read_log(s.data_dir, int(q.get("after", 0)), int(q.get("gen", 0))))

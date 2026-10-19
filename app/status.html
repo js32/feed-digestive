@@ -5,233 +5,402 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <meta name="robots" content="noindex">
 <title>Digest-Status</title>
+<link rel="icon" id="favicon" href="data:,">
 <style>
+/* Farben und Maße nach Tailwind (gray / indigo / green / red / amber) */
 :root {
-  --bg: #e9edf1;
-  --paper: #f7f9fb;
-  --ink: #18212c;
-  --muted: #5d6977;
-  --line: #cdd5de;
-  --accent: #2c55c9;
-  --accent-soft: #dbe4fb;
-  --ok: #2a7a57;
-  --warn: #a8670f;
-  --err: #bd3a26;
-  --err-soft: #f8e1dc;
-  --mono: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
-  --sans: "Avenir Next", "Segoe UI", system-ui, sans-serif;
+  --page: #f9fafb;          /* gray-50 */
+  --card: #ffffff;
+  --ring: rgba(17, 24, 39, 0.08);
+  --divide: #f3f4f6;        /* gray-100 */
+  --border: #e5e7eb;        /* gray-200 */
+  --input: #d1d5db;         /* gray-300 */
+  --text: #111827;          /* gray-900 */
+  --text-2: #4b5563;        /* gray-600 */
+  --text-3: #6b7280;        /* gray-500 */
+  --brand: #4f46e5;         /* indigo-600 */
+  --brand-soft: #eef2ff;    /* indigo-50 */
+  --brand-ring: rgba(79, 70, 229, 0.2);
+  --bar-rest: #c7d2fe;      /* indigo-200 */
+  --ok: #15803d;  --ok-bg: #f0fdf4;  --ok-ring: rgba(22, 163, 74, 0.2);
+  --err: #b91c1c; --err-bg: #fef2f2; --err-ring: rgba(220, 38, 38, 0.15);
+  --warn: #92400e; --warn-bg: #fffbeb; --warn-ring: rgba(217, 119, 6, 0.2);
+  --gray-bg: #f9fafb; --gray-ring: rgba(107, 114, 128, 0.15);
+  --code-bg: #111827; --code-text: #d1d5db; --code-muted: #6b7280;
+  --shadow: 0 1px 2px 0 rgba(0, 0, 0, 0.05);
+  --sans: Inter, ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  --mono: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
 }
 @media (prefers-color-scheme: dark) {
   :root {
-    --bg: #12171d;
-    --paper: #1a2129;
-    --ink: #e2e8ef;
-    --muted: #93a0ae;
-    --line: #2d3741;
-    --accent: #86a6ff;
-    --accent-soft: #233154;
-    --ok: #5cc493;
-    --warn: #e0a447;
-    --err: #ff8a73;
-    --err-soft: #3d221d;
+    --page: #111827;  --card: #1f2937;  --ring: rgba(255, 255, 255, 0.08);
+    --divide: rgba(255, 255, 255, 0.06);  --border: rgba(255, 255, 255, 0.1);  --input: rgba(255, 255, 255, 0.15);
+    --text: #f9fafb;  --text-2: #d1d5db;  --text-3: #9ca3af;
+    --brand: #818cf8;  --brand-soft: rgba(129, 140, 248, 0.12);  --brand-ring: rgba(129, 140, 248, 0.3);
+    --bar-rest: #3730a3;
+    --ok: #4ade80;  --ok-bg: rgba(74, 222, 128, 0.1);  --ok-ring: rgba(74, 222, 128, 0.2);
+    --err: #f87171; --err-bg: rgba(248, 113, 113, 0.1); --err-ring: rgba(248, 113, 113, 0.2);
+    --warn: #fbbf24; --warn-bg: rgba(251, 191, 36, 0.1); --warn-ring: rgba(251, 191, 36, 0.2);
+    --gray-bg: rgba(156, 163, 175, 0.1); --gray-ring: rgba(156, 163, 175, 0.2);
+    --code-bg: #030712; --shadow: none;
   }
 }
 * { box-sizing: border-box; }
 html { -webkit-text-size-adjust: 100%; }
 body {
   margin: 0;
-  background: var(--bg);
-  color: var(--ink);
-  font: 16px/1.5 var(--sans);
+  background: var(--page);
+  color: var(--text);
+  font: 14px/1.5 var(--sans);
   font-variant-numeric: tabular-nums;
+  -webkit-font-smoothing: antialiased;
 }
-a { color: var(--accent); text-underline-offset: 2px; }
-a:focus-visible, button:focus-visible, input:focus-visible {
-  outline: 2px solid var(--accent);
-  outline-offset: 2px;
-}
-.wrap { max-width: 1240px; margin: 0 auto; padding: 32px 24px 48px; }
+a { color: inherit; }
+:focus-visible { outline: 2px solid var(--brand); outline-offset: 2px; }
+svg.icon { width: 16px; height: 16px; flex: none; stroke: currentColor; fill: none; stroke-width: 1.6; stroke-linecap: round; stroke-linejoin: round; }
+.wrap { max-width: 1200px; margin: 0 auto; padding: 32px 24px 48px; }
 
-/* Kopf: der Zustand als Satz */
-header { display: flex; flex-wrap: wrap; gap: 8px 32px; align-items: end; justify-content: space-between; }
-#headline {
-  margin: 0;
-  font-size: clamp(1.9rem, 4.2vw, 3rem);
-  line-height: 1.1;
-  font-weight: 600;
-  letter-spacing: -0.02em;
-  max-width: 22ch;
-}
-#subline { margin: 10px 0 0; color: var(--muted); max-width: 60ch; }
+/* ---------- Kopf ---------- */
+.eyebrow { margin: 0 0 4px; font-size: 13px; color: var(--text-3); }
+.title-row { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 12px; }
+h1 { margin: 0; font-size: 28px; line-height: 1.25; font-weight: 700; letter-spacing: -0.02em; }
+#subline { margin: 6px 0 0; color: var(--text-2); max-width: 70ch; }
 #subline.err { color: var(--err); }
-.facts { margin: 0; display: grid; grid-template-columns: auto auto; gap: 2px 14px; font-size: 0.9rem; }
-.facts dt { color: var(--muted); }
-.facts dd { margin: 0; }
+.meta { display: flex; flex-wrap: wrap; gap: 8px 24px; margin-top: 14px; color: var(--text-3); font-size: 13px; }
+.meta span { display: inline-flex; align-items: center; gap: 6px; min-width: 0; overflow-wrap: anywhere; }
 
-/* Ablauf eines Laufs: Stufen mit Ergebnis */
-#run { margin: 28px 0 24px; padding-bottom: 20px; }
-#run-caption { margin: 2px 20px 0; color: var(--muted); font-size: 0.88rem; }
-.steps {
-  list-style: none;
-  margin: 18px 0 0;
-  padding: 0 20px;
-  display: grid;
-  grid-template-columns: repeat(6, minmax(0, 1fr));
-  gap: 0 8px;
-  counter-reset: step;
+.badge {
+  display: inline-flex; align-items: center; gap: 6px;
+  padding: 2px 8px; border-radius: 6px;
+  font-size: 12px; font-weight: 500; line-height: 1.5;
+  box-shadow: inset 0 0 0 1px var(--r);
+  background: var(--b); color: var(--c);
+  white-space: nowrap;
 }
-.steps li { position: relative; counter-increment: step; }
-.dot {
-  position: relative; z-index: 1;
-  display: grid; place-items: center;
-  width: 30px; height: 30px;
-  border-radius: 50%;
-  border: 2px solid var(--line);
-  background: var(--paper);
-  color: var(--muted);
-  font-size: 0.82rem; font-weight: 700;
+.badge.ok   { --b: var(--ok-bg);    --c: var(--ok);    --r: var(--ok-ring); }
+.badge.err  { --b: var(--err-bg);   --c: var(--err);   --r: var(--err-ring); }
+.badge.run  { --b: var(--brand-soft); --c: var(--brand); --r: var(--brand-ring); }
+.badge.warn { --b: var(--warn-bg);  --c: var(--warn);  --r: var(--warn-ring); }
+.badge.gray { --b: var(--gray-bg);  --c: var(--text-2); --r: var(--gray-ring); }
+.badge .pip { width: 6px; height: 6px; border-radius: 50%; background: currentColor; }
+.badge.run .pip { animation: blink 1.4s ease-in-out infinite; }
+@keyframes blink { 50% { opacity: 0.25; } }
+
+button.badge { font-family: inherit; border: 0; cursor: pointer; }
+button.badge:hover { filter: brightness(0.97); }
+button.badge .chev { width: 12px; height: 12px; stroke-width: 2.2; transition: transform 0.15s; }
+button.badge[aria-expanded="true"] .chev { transform: rotate(180deg); }
+
+/* ---------- Dienste ---------- */
+#health { margin-top: 20px; }
+#health .card-head { display: flex; flex-wrap: wrap; gap: 8px 16px; align-items: center; justify-content: space-between; }
+.btn {
+  display: inline-flex; align-items: center; gap: 6px;
+  font: inherit; font-size: 13px; font-weight: 600;
+  padding: 6px 12px; border: 0; border-radius: 8px; cursor: pointer;
+  background: var(--card); color: var(--text);
+  box-shadow: var(--shadow), inset 0 0 0 1px var(--input);
 }
-.dot::before { content: counter(step); }
-/* Verbindungslinie zum nächsten Schritt */
-.steps li:not(:last-child)::after {
-  content: "";
-  position: absolute; top: 14px; left: 38px; right: -2px;
-  height: 2px; border-radius: 1px;
-  background: var(--line);
+.btn:hover { background: var(--gray-bg); }
+.btn[disabled] { opacity: 0.6; cursor: progress; }
+.services { list-style: none; margin: 0; padding: 0; }
+.services li { display: flex; gap: 16px; align-items: center; justify-content: space-between; padding: 14px 24px; border-top: 1px solid var(--divide); }
+.services li:first-child { border-top: 0; }
+.services .svc { min-width: 0; }
+.services .svc-name { font-weight: 600; }
+.services .svc-detail { margin-top: 2px; font-size: 13px; color: var(--text-3); overflow-wrap: anywhere; }
+.services .svc-side { display: flex; align-items: center; gap: 10px; flex: none; font-size: 12px; color: var(--text-3); }
+
+/* ---------- Karten ---------- */
+.card { background: var(--card); border-radius: 12px; box-shadow: var(--shadow), 0 0 0 1px var(--ring); min-width: 0; }
+.card-head { padding: 18px 24px; border-bottom: 1px solid var(--border); }
+.card-head h2 { margin: 0; font-size: 15px; font-weight: 600; line-height: 1.4; }
+.card-head p { margin: 2px 0 0; color: var(--text-3); font-size: 13px; }
+.card-body { padding: 20px 24px; }
+.stack { display: grid; gap: 24px; min-width: 0; }
+
+/* ---------- Kennzahlen ---------- */
+.stats { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 16px; margin: 28px 0 24px; }
+.stat { padding: 20px 24px; }
+.stat dt { color: var(--text-3); font-size: 13px; font-weight: 500; }
+.stat dd { margin: 4px 0 0; }
+.stat .num { font-size: 30px; font-weight: 600; letter-spacing: -0.02em; line-height: 1.2; }
+.stat .num.none { color: var(--text-3); }
+.stat .sub { margin-top: 4px; font-size: 13px; color: var(--text-3); }
+.stat .share { display: block; height: 4px; margin-top: 12px; border-radius: 2px; background: var(--divide); overflow: hidden; }
+.stat .share i { display: block; height: 100%; background: var(--brand); border-radius: 2px; }
+
+/* ---------- Schritte (wie Tailwinds "Steps – circles") ---------- */
+.steps { list-style: none; margin: 0; padding: 4px 0 0; display: grid; grid-template-columns: repeat(6, minmax(0, 1fr)); }
+.steps li { position: relative; padding-right: 12px; }
+.steps li:not(:last-child)::before {
+  content: ""; position: absolute; top: 15px; left: 36px; right: 4px; height: 2px; background: var(--border);
 }
-.step-name { margin-top: 8px; font-weight: 600; font-size: 0.92rem; color: var(--muted); }
-.step-result { font-size: 0.84rem; color: var(--muted); min-height: 1.3em; overflow-wrap: anywhere; }
+.steps li.done:not(:last-child)::before { background: var(--brand); }
+.circle {
+  position: relative; display: grid; place-items: center;
+  width: 32px; height: 32px; border-radius: 50%;
+  border: 2px solid var(--input); background: var(--card); color: var(--text-3);
+}
+.circle svg { width: 18px; height: 18px; stroke-width: 2.4; }
+.steps li.done .circle { border-color: var(--brand); background: var(--brand); color: #fff; }
+.steps li.now .circle { border-color: var(--brand); }
+.steps li.now .circle::after { content: ""; width: 10px; height: 10px; border-radius: 50%; background: var(--brand); animation: blink 1.4s ease-in-out infinite; }
+.steps li.fail .circle { border-color: var(--err); background: var(--err); color: #fff; }
+.step-name { margin-top: 10px; font-weight: 500; color: var(--text-3); }
+.steps li.done .step-name { color: var(--text); }
+.steps li.now .step-name { color: var(--brand); }
+.steps li.fail .step-name { color: var(--err); }
+.step-result { font-size: 13px; color: var(--text-3); overflow-wrap: anywhere; }
+@media (prefers-reduced-motion: reduce) { .badge.run .pip, .steps li.now .circle::after { animation: none; } }
 
-.steps li.done .dot { border-color: var(--ok); background: var(--ok); color: var(--paper); }
-.steps li.done .dot::before { content: "✓"; }
-.steps li.done::after { background: var(--ok); }
-.steps li.done .step-name { color: var(--ink); }
-.steps li.now .dot { border-color: var(--accent); color: var(--accent); box-shadow: 0 0 0 4px var(--accent-soft); animation: pulse 1.6s ease-in-out infinite; }
-.steps li.now .step-name { color: var(--accent); }
-.steps li.now .step-result { color: var(--ink); }
-.steps li.fail .dot { border-color: var(--err); background: var(--err); color: var(--paper); }
-.steps li.fail .dot::before { content: "✕"; }
-.steps li.fail .step-name, .steps li.fail .step-result { color: var(--err); }
-@keyframes pulse { 50% { box-shadow: 0 0 0 7px var(--accent-soft); } }
-@media (prefers-reduced-motion: reduce) { .steps li.now .dot { animation: none; } }
+/* ---------- Spalten ---------- */
+.grid { display: grid; grid-template-columns: minmax(0, 3fr) minmax(0, 2fr); gap: 24px; align-items: start; margin-top: 24px; }
 
-/* Zwei Spalten: Digest und Logs */
-main { display: grid; grid-template-columns: minmax(0, 5fr) minmax(0, 7fr); gap: 24px; align-items: start; }
-section { background: var(--paper); border: 1px solid var(--line); border-radius: 10px; }
-section > h2 { margin: 0; padding: 16px 20px 0; font-size: 1.1rem; }
-.note code { overflow-wrap: anywhere; }
-.note { margin: 2px 20px 0; color: var(--muted); font-size: 0.88rem; }
-
-#digest { padding-bottom: 8px; }
-#digest h3 { margin: 18px 20px 4px; font-size: 0.95rem; color: var(--muted); font-weight: 600; }
-#digest ol { list-style: none; margin: 0; padding: 0 20px; }
-#digest li { display: grid; grid-template-columns: 2.2em 1fr; gap: 10px; padding: 10px 0; border-top: 1px solid var(--line); }
-#digest h3 + ol li:first-child { border-top: 0; }
+/* ---------- Listen (Digest, knapp verpasst) ---------- */
+.list { list-style: none; margin: 0; padding: 0; }
+.list li { display: grid; grid-template-columns: 36px minmax(0, 1fr); gap: 14px; padding: 16px 24px; border-top: 1px solid var(--divide); }
+.list li:first-child { border-top: 0; }
+.group { padding: 10px 24px; background: var(--gray-bg); border-top: 1px solid var(--divide); border-bottom: 1px solid var(--divide); font-size: 13px; font-weight: 600; color: var(--text-2); }
 .score {
   justify-self: start; align-self: start;
-  min-width: 2em; padding: 1px 0; text-align: center;
-  border-radius: 5px;
-  background: var(--accent-soft); color: var(--accent);
-  font-weight: 700; font-size: 0.9rem;
+  display: grid; place-items: center;
+  width: 32px; height: 32px; border-radius: 8px;
+  background: var(--brand-soft); color: var(--brand);
+  box-shadow: inset 0 0 0 1px var(--brand-ring);
+  font-size: 13px; font-weight: 600;
 }
-.item-title { font-weight: 600; line-height: 1.35; }
-.item-title a { color: inherit; text-decoration-color: var(--line); }
-.item-title a:hover { text-decoration-color: currentColor; }
-.item-why { margin: 3px 0 0; font-size: 0.92rem; }
-.item-meta { margin: 3px 0 0; font-size: 0.82rem; color: var(--muted); }
+.item-title { font-weight: 600; line-height: 1.4; }
+.item-title a { text-decoration: none; }
+.item-title a:hover { color: var(--brand); }
+.item-why { margin: 4px 0 0; color: var(--text-2); }
+.item-meta { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; margin-top: 8px; font-size: 12px; color: var(--text-3); }
+.empty { padding: 20px 24px; margin: 0; color: var(--text-3); }
 
-/* Logs */
-#logs { display: flex; flex-direction: column; }
-.tools { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; padding: 12px 20px; border-bottom: 1px solid var(--line); }
-.seg { display: inline-flex; border: 1px solid var(--line); border-radius: 7px; overflow: hidden; }
-.seg button {
-  font: inherit; font-size: 0.85rem;
-  border: 0; border-left: 1px solid var(--line);
-  padding: 5px 10px; background: transparent; color: var(--ink); cursor: pointer;
+/* ---------- Score-Verteilung ---------- */
+.legend { display: flex; flex-wrap: wrap; gap: 4px 16px; font-size: 12px; color: var(--text-3); }
+.legend span { display: inline-flex; align-items: center; gap: 6px; }
+.legend span::before { content: ""; width: 10px; height: 10px; border-radius: 3px; background: var(--c); }
+.hist {
+  --gap: 4px;
+  position: relative;
+  display: grid; grid-template-columns: repeat(11, minmax(0, 1fr)); gap: var(--gap);
+  height: 150px; margin-top: 28px;
+  border-bottom: 1px solid var(--border);
 }
-.seg button:first-child { border-left: 0; }
-.seg button[aria-pressed="true"] { background: var(--ink); color: var(--paper); }
-.tools input[type="search"] {
-  flex: 1 1 140px; min-width: 0;
-  font: inherit; font-size: 0.85rem;
-  padding: 5px 10px;
-  border: 1px solid var(--line); border-radius: 7px;
-  background: var(--bg); color: var(--ink);
+.col-bar { display: flex; flex-direction: column; justify-content: end; gap: 2px; height: 100%; cursor: default; }
+.col-bar .rest { background: var(--bar-rest); border-radius: 4px 4px 0 0; }
+.col-bar .shown { background: var(--brand); }
+.col-bar .shown:first-child { border-radius: 4px 4px 0 0; }
+.col-bar .count { text-align: center; font-size: 11px; color: var(--text-3); line-height: 1.3; }
+.col-bar:hover .rest, .col-bar:focus-visible .rest { filter: brightness(0.95); }
+.threshold { position: absolute; top: -20px; bottom: 0; width: 0; border-left: 1.5px dashed var(--text); }
+.threshold span { position: absolute; top: -1px; left: 5px; white-space: nowrap; font-size: 11px; font-weight: 600; }
+.threshold.floor { border-left: 1px dotted var(--text-3); }
+.threshold.floor span { font-weight: 400; color: var(--text-3); }
+.xaxis { display: grid; grid-template-columns: repeat(11, minmax(0, 1fr)); gap: 4px; margin-top: 6px; font-size: 11px; color: var(--text-3); text-align: center; }
+.callout { display: flex; gap: 10px; margin-top: 16px; padding: 12px 14px; border-radius: 8px; background: var(--brand-soft); color: var(--text-2); font-size: 13px; }
+.callout svg { color: var(--brand); margin-top: 2px; }
+details.raw { margin-top: 12px; font-size: 13px; }
+details.raw summary { cursor: pointer; color: var(--text-3); }
+
+/* ---------- Tabellen ---------- */
+table.tbl { width: 100%; border-collapse: collapse; font-size: 13px; }
+.tbl th { padding: 10px 24px 8px; text-align: left; font-size: 12px; font-weight: 600; color: var(--text-3); border-bottom: 1px solid var(--border); }
+.tbl td { padding: 10px 24px; border-top: 1px solid var(--divide); color: var(--text-2); vertical-align: top; }
+.tbl tr:first-child td { border-top: 0; }
+.tbl td.r, .tbl th.r { text-align: right; }
+.tbl td:first-child { color: var(--text); font-weight: 500; }
+details.raw .tbl th, details.raw .tbl td { padding-left: 0; padding-right: 16px; }
+
+/* ---------- Logs ---------- */
+#logs { margin-top: 24px; }
+.toolbar { display: flex; flex-wrap: wrap; gap: 10px 16px; align-items: center; padding: 14px 24px; border-bottom: 1px solid var(--border); }
+.btn-group { display: inline-flex; border-radius: 8px; box-shadow: var(--shadow), 0 0 0 1px var(--input); overflow: hidden; }
+.btn-group button {
+  font: inherit; font-size: 13px; font-weight: 500;
+  padding: 6px 12px; border: 0; border-left: 1px solid var(--input);
+  background: var(--card); color: var(--text-2); cursor: pointer;
 }
-.tools label { font-size: 0.85rem; color: var(--muted); display: inline-flex; gap: 6px; align-items: center; }
-#log {
-  margin: 0;
-  height: min(68vh, 760px);
-  overflow: auto;
-  padding: 10px 0;
-  font: 0.8rem/1.55 var(--mono);
+.btn-group button:first-child { border-left: 0; }
+.btn-group button:hover { background: var(--gray-bg); }
+.btn-group button[aria-pressed="true"] { background: var(--brand); color: #fff; }
+.search { flex: 1 1 180px; min-width: 0; position: relative; }
+.search svg { position: absolute; left: 10px; top: 50%; transform: translateY(-50%); color: var(--text-3); }
+.search input {
+  width: 100%; font: inherit; font-size: 13px;
+  padding: 6px 10px 6px 32px; border: 0; border-radius: 8px;
+  box-shadow: inset 0 0 0 1px var(--input); background: var(--card); color: var(--text);
 }
-#log .ln { display: grid; grid-template-columns: 5.2em 1fr; gap: 10px; padding: 0 20px; white-space: pre-wrap; word-break: break-word; }
-#log .ln time { color: var(--muted); }
-#log .WARNING { color: var(--warn); }
-#log .ERROR, #log .CRITICAL { color: var(--err); background: var(--err-soft); }
-#log .wait { color: var(--muted); }
-#log .run-start { border-top: 1px dashed var(--line); margin-top: 8px; padding-top: 8px; }
-#log .empty { padding: 0 20px; color: var(--muted); font-family: var(--sans); font-size: 0.9rem; }
-#conn { font-size: 0.82rem; color: var(--muted); margin-left: auto; }
+.search input:focus { outline: none; box-shadow: inset 0 0 0 2px var(--brand); }
+.check { display: inline-flex; gap: 8px; align-items: center; font-size: 13px; color: var(--text-2); cursor: pointer; }
+.check input { width: 15px; height: 15px; margin: 0; accent-color: var(--brand); }
+#conn { margin-left: auto; font-size: 12px; color: var(--text-3); }
 #conn.off { color: var(--err); }
+#log {
+  height: min(60vh, 640px); overflow: auto; padding: 12px 0;
+  background: var(--code-bg); color: var(--code-text);
+  border-radius: 0 0 12px 12px;
+  font: 12.5px/1.65 var(--mono);
+}
+#log .ln { display: grid; grid-template-columns: 5.4em minmax(0, 1fr); gap: 12px; padding: 0 24px; white-space: pre-wrap; word-break: break-word; }
+#log .ln time { color: var(--code-muted); }
+#log .WARNING span { color: #fbbf24; }
+#log .ERROR, #log .CRITICAL { background: rgba(248, 113, 113, 0.12); }
+#log .ERROR span, #log .CRITICAL span { color: #fca5a5; }
+#log .wait span { color: var(--code-muted); }
+#log .run-start { margin-top: 10px; padding-top: 10px; border-top: 1px solid rgba(255, 255, 255, 0.08); }
+#log .run-start:first-child { margin-top: 0; padding-top: 0; border-top: 0; }
+#log .none { padding: 0 24px; margin: 0; color: var(--code-muted); font-family: var(--sans); }
 
-@media (max-width: 860px) {
+/* ---------- Tooltip ---------- */
+#tip {
+  position: fixed; z-index: 10; pointer-events: none; max-width: 260px;
+  padding: 6px 10px; border-radius: 6px;
+  background: #111827; color: #f9fafb; font-size: 12px;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+  opacity: 0; transition: opacity 0.1s;
+}
+#tip.on { opacity: 1; }
+
+@media (max-width: 960px) {
+  .grid { grid-template-columns: minmax(0, 1fr); }
+  .stats { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+}
+@media (max-width: 640px) {
   .wrap { padding: 20px 16px 32px; }
-  main { grid-template-columns: minmax(0, 1fr); }
-  header > div { min-width: 0; }
-  .facts dd { overflow-wrap: anywhere; }
+  h1 { font-size: 22px; }
+  .stats { gap: 12px; }
+  .stat { padding: 16px; }
+  .stat .num { font-size: 24px; }
+  .card-head, .card-body { padding-left: 16px; padding-right: 16px; }
+  .list li, .group, .toolbar, .empty, .services li { padding-left: 16px; padding-right: 16px; }
+  .services li { align-items: start; }
+  .tbl th, .tbl td { padding-left: 16px; padding-right: 8px; }
+  #log .ln { padding: 0 16px; grid-template-columns: minmax(0, 1fr); gap: 0; }
+  /* Schritte senkrecht */
   .steps { grid-template-columns: minmax(0, 1fr); }
-  .steps li { display: grid; grid-template-columns: 30px minmax(0, 1fr); column-gap: 12px; padding-bottom: 14px; }
-  .steps li .dot { grid-row: span 2; }
-  .step-name { margin-top: 4px; }
-  .steps li:not(:last-child)::after { top: 34px; bottom: 2px; left: 14px; right: auto; width: 2px; height: auto; }
-  #log { height: 60vh; }
+  .steps li { display: grid; grid-template-columns: 32px minmax(0, 1fr); column-gap: 12px; padding: 0 0 16px; }
+  .steps li .circle { grid-row: span 2; }
+  .steps li:not(:last-child)::before { top: 36px; bottom: 4px; left: 15px; right: auto; width: 2px; height: auto; }
+  .step-name { margin-top: 5px; }
 }
 </style>
 </head>
 <body>
+<svg width="0" height="0" style="position:absolute" aria-hidden="true">
+  <symbol id="i-clock" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></symbol>
+  <symbol id="i-doc" viewBox="0 0 24 24"><path d="M6 3h8l4 4v14H6z"/><path d="M14 3v4h4M9 12h6M9 16h6"/></symbol>
+  <symbol id="i-chip" viewBox="0 0 24 24"><rect x="6" y="6" width="12" height="12" rx="2"/><path d="M9 3v3M15 3v3M9 18v3M15 18v3M3 9h3M3 15h3M18 9h3M18 15h3"/></symbol>
+  <symbol id="i-check" viewBox="0 0 24 24"><path d="M5 12.5l4.5 4.5L19 7.5"/></symbol>
+  <symbol id="i-x" viewBox="0 0 24 24"><path d="M6 6l12 12M18 6L6 18"/></symbol>
+  <symbol id="i-search" viewBox="0 0 24 24"><circle cx="11" cy="11" r="6.5"/><path d="M16 16l4.5 4.5"/></symbol>
+  <symbol id="i-chev" viewBox="0 0 24 24"><path d="M6 9l6 6 6-6"/></symbol>
+  <symbol id="i-refresh" viewBox="0 0 24 24"><path d="M20 11a8 8 0 1 0-2.3 5.7M20 5v6h-6"/></symbol>
+  <symbol id="i-info" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M12 11v5M12 8h.01"/></symbol>
+</svg>
+
 <div class="wrap">
   <header>
-    <div>
+    <p class="eyebrow">feed-digestive</p>
+    <div class="title-row">
       <h1 id="headline">Status wird geladen …</h1>
-      <p id="subline"></p>
+      <span id="badge"></span>
     </div>
-    <dl class="facts" id="facts"></dl>
+    <p id="subline"></p>
+    <div class="meta" id="meta"></div>
   </header>
 
-  <section id="run" aria-labelledby="run-h">
-    <h2 id="run-h">Letzter Lauf</h2>
-    <p id="run-caption"></p>
-    <ol class="steps" id="steps"></ol>
+  <section class="card" id="health" aria-labelledby="health-h" hidden>
+    <div class="card-head">
+      <div>
+        <h2 id="health-h">Dienste</h2>
+        <p id="health-note">Wird geprüft …</p>
+      </div>
+      <button type="button" class="btn" id="recheck"><svg class="icon"><use href="#i-refresh"/></svg>Neu prüfen</button>
+    </div>
+    <ul class="services" id="services"></ul>
   </section>
 
-  <main>
-    <section id="digest" aria-labelledby="digest-h">
-      <h2 id="digest-h">Letzter Digest</h2>
-      <p class="note" id="digest-note"></p>
-      <div id="digest-body"></div>
-    </section>
+  <dl class="stats" id="stats"></dl>
 
-    <section id="logs" aria-labelledby="logs-h">
-      <h2 id="logs-h">Logs</h2>
-      <p class="note">Geplante Läufe und solche per <code>docker compose exec … run</code>, auch über Neustarts hinweg.</p>
-      <div class="tools">
-        <div class="seg" role="group" aria-label="Stufe">
-          <button type="button" data-level="all" aria-pressed="true">Alle</button>
-          <button type="button" data-level="WARNING">Warnungen</button>
-          <button type="button" data-level="ERROR">Fehler</button>
+  <section class="card" aria-labelledby="run-h">
+    <div class="card-head">
+      <h2 id="run-h">Letzter Lauf</h2>
+      <p id="run-caption"></p>
+    </div>
+    <div class="card-body"><ol class="steps" id="steps"></ol></div>
+  </section>
+
+  <div class="grid">
+    <div class="stack">
+      <section class="card" aria-labelledby="digest-h">
+        <div class="card-head">
+          <h2 id="digest-h">Letzter Digest</h2>
+          <p id="digest-note"></p>
         </div>
-        <input type="search" id="q" placeholder="Suchen" aria-label="Logs durchsuchen">
-        <label><input type="checkbox" id="lastonly"> nur letzter Lauf</label>
-        <label><input type="checkbox" id="hidewait" checked> Wartezeilen ausblenden</label>
-        <label><input type="checkbox" id="follow" checked> mitlaufen</label>
-        <span id="conn"></span>
+        <div id="digest-body"></div>
+      </section>
+      <section class="card" id="near-card" aria-labelledby="near-h" hidden>
+        <div class="card-head">
+          <h2 id="near-h">Knapp nicht drin</h2>
+          <p id="near-note"></p>
+        </div>
+        <ul class="list" id="near"></ul>
+      </section>
+    </div>
+
+    <div class="stack">
+      <section class="card" aria-labelledby="scores-h">
+        <div class="card-head">
+          <h2 id="scores-h">Score-Verteilung</h2>
+          <p id="scores-note"></p>
+        </div>
+        <div class="card-body">
+          <div class="legend">
+            <span style="--c: var(--brand)">im Digest</span>
+            <span style="--c: var(--bar-rest)">nicht im Digest</span>
+          </div>
+          <div class="hist" id="hist"></div>
+          <div class="xaxis" id="xaxis" aria-hidden="true"></div>
+          <div class="callout" id="scores-hint" hidden></div>
+          <details class="raw"><summary>Als Tabelle</summary><table class="tbl" id="scores-table"></table></details>
+        </div>
+      </section>
+
+      <section class="card" aria-labelledby="hist-h">
+        <div class="card-head">
+          <h2 id="hist-h">Letzte Läufe</h2>
+        </div>
+        <div id="runs"></div>
+      </section>
+    </div>
+  </div>
+
+  <section class="card" id="logs" aria-labelledby="logs-h">
+    <div class="card-head">
+      <h2 id="logs-h">Logs</h2>
+      <p>Geplante Läufe und solche per <code>docker compose exec … run</code>, auch über Neustarts hinweg.</p>
+    </div>
+    <div class="toolbar">
+      <div class="btn-group" role="group" aria-label="Stufe">
+        <button type="button" data-level="all" aria-pressed="true">Alle</button>
+        <button type="button" data-level="WARNING">Warnungen</button>
+        <button type="button" data-level="ERROR">Fehler</button>
       </div>
-      <div id="log" role="log" aria-live="off"></div>
-    </section>
-  </main>
+      <label class="search">
+        <svg class="icon"><use href="#i-search"/></svg>
+        <input type="search" id="q" placeholder="Logs durchsuchen" aria-label="Logs durchsuchen">
+      </label>
+      <label class="check"><input type="checkbox" id="lastonly"> nur letzter Lauf</label>
+      <label class="check"><input type="checkbox" id="hidewait" checked> Wartezeilen ausblenden</label>
+      <label class="check"><input type="checkbox" id="follow" checked> mitlaufen</label>
+      <span id="conn"></span>
+    </div>
+    <div id="log" role="log" aria-live="off"></div>
+  </section>
 </div>
+<div id="tip" role="tooltip"></div>
 
 <script>
 "use strict";
@@ -243,30 +412,43 @@ const el = (tag, cls, text) => {
   if (text != null) e.textContent = text;
   return e;
 };
+const icon = (name) => {
+  const svg = document.createElementNS("http://www.w3.org/2000/svg", "svg");
+  svg.setAttribute("class", "icon");
+  svg.setAttribute("aria-hidden", "true");
+  const use = document.createElementNS("http://www.w3.org/2000/svg", "use");
+  use.setAttribute("href", `#i-${name}`);
+  svg.append(use);
+  return svg;
+};
+const badge = (cls, text, pip) => {
+  const b = el("span", `badge ${cls}`);
+  if (pip) b.append(el("span", "pip"));
+  b.append(text);
+  return b;
+};
+function toggleBadge(cls, text, pip) {
+  const b = el("button", `badge ${cls}`);
+  b.type = "button";
+  b.setAttribute("aria-controls", "health");
+  b.setAttribute("aria-expanded", String(!$("health").hidden));
+  b.title = "Zustand der einzelnen Dienste anzeigen";
+  if (pip) b.append(el("span", "pip"));
+  b.append(text);
+  const chev = icon("chev");
+  chev.classList.add("chev");
+  b.append(chev);
+  b.addEventListener("click", () => toggleHealth(b));
+  return b;
+}
+const css = (name) => getComputedStyle(document.documentElement).getPropertyValue(name).trim();
 
-// Stufen eines Laufs – jede beginnt mit der Log-Zeile, die das Programm an dieser Stelle schreibt,
-// result liest das Ergebnis der Stufe aus ihren Log-Zeilen
-const STAGES = [
-  { name: "Holen", start: null,
-    result: (m) => (m = m.match(/^(\d+) (?:ungelesene|neue) Einträge/)) && `${m[1]} Artikel geholt` },
-  { name: "Filtern", start: /Einträge aus /,
-    result: (m) => (m = m.match(/^(\d+) nach Filter\/Deduplizierung \((\d+)/)) && `${m[1]} übrig, ${m[2]} schon gezeigt` },
-  { name: "Bewerten", start: /^Laya: |^Bewerte \d+ Artikel|^Bewertung = Laya/,
-    result: (m) => (m = m.match(/^Bewerte (\d+) Artikel .*\((\d+) aus früheren/)) && `${m[1]} neu, ${m[2]} gemerkt` },
-  { name: "Auswählen", start: /^Embeddings mit |Artikel ausgewählt/,
-    result: (m) => (m = m.match(/^(\d+) Artikel ausgewählt/)) && `${m[1]} Artikel` },
-  { name: "Auszüge & Themen", start: /Artikel ausgewählt/,
-    result: (m) => /^Keine Themengruppen|^Themengruppen fehlgeschlagen/.test(m) ? "ohne Themen"
-      : (m = m.match(/^Digest nach Themen gruppiert: (.*)$/)) && `${m[1].split("), ").length} Themen` },
-  { name: "Feed", start: /nach Themen gruppiert|Keine Themengruppen|Themengruppen fehlgeschlagen/,
-    result: (m, ln) => /^Feed aktualisiert/.test(m) && `aktualisiert ${fmtTime(new Date(ln.t * 1000))}` },
-];
-const DONE = /^Feed aktualisiert/;
+const STAGES = ["Holen", "Filtern", "Bewerten", "Auswählen", "Auszüge & Themen", "Feed"];
 const WAIT = /: warte \d+s \(LLM_MIN_INTERVAL\)$/;
 
 let lines = [], seq = 0, gen = 0, status = null, level = "all";
 
-// ---------- Zeit ----------
+// ---------- Zeit und Zahlen ----------
 const fmtTime = (d) => new Date(d).toLocaleTimeString("de-DE", { hour: "2-digit", minute: "2-digit" });
 function fmtWhen(iso) {
   if (!iso) return "–";
@@ -278,143 +460,276 @@ function fmtWhen(iso) {
   return `${label} ${fmtTime(iso)}`;
 }
 function fmtDur(sec) {
+  if (sec == null) return "–";
   sec = Math.max(0, Math.round(sec));
   if (sec < 60) return `${sec} s`;
   const m = Math.floor(sec / 60);
   return m < 60 ? `${m} min` : `${Math.floor(m / 60)} h ${m % 60} min`;
 }
-
-// ---------- Stufen aus den Logs ablesen ----------
-function stageOf(runLines) {
-  let idx = 0, detail = "", finished = false;
-  const results = [];
-  for (const ln of runLines) {
-    STAGES.forEach((st, i) => {
-      if (st.start && i > idx && st.start.test(ln.msg)) idx = i;
-      const r = st.result(ln.msg, ln);
-      if (r) results[i] = r;
-    });
-    if (DONE.test(ln.msg)) finished = true;
-    if (!WAIT.test(ln.msg)) detail = ln.msg;
-  }
-  return { idx, detail, finished, results };
-}
-// Zeilen eines Laufs – nur solange die Log-Datei seit Laufbeginn nicht umbenannt wurde
-const linesFrom = (run) => run && run.gen === gen ? lines.filter((ln) => ln.n >= run.first_log) : [];
+const num = (n) => n.toLocaleString("de-DE");
 const by = (run) => run.source === "Befehl" ? " per Befehl" : "";
 
-function renderSteps(mode, info, title, caption) {
-  $("run-h").textContent = title;
-  $("run-caption").textContent = caption;
-  const results = (info && info.results) || [];
-  const list = $("steps");
-  list.replaceChildren();
-  STAGES.forEach((st, i) => {
-    let cls = "", result = results[i] || "";
-    if (mode === "done") cls = "done";
-    else if (mode === "running" || mode === "failed") {
-      cls = i < info.idx ? "done" : i === info.idx ? (mode === "running" ? "now" : "fail") : "";
-      if (i === info.idx && !result) result = mode === "running" ? "läuft gerade" : "hier abgebrochen";
-    }
-    const li = el("li", cls);
-    if (cls === "now") li.setAttribute("aria-current", "step");
-    li.append(el("span", "dot"), el("div", "step-name", st.name), el("div", "step-result", result));
-    list.append(li);
-  });
+// ---------- Tooltip ----------
+const tip = $("tip");
+function attachTip(node, text) {
+  node.tabIndex = 0;
+  node.setAttribute("aria-label", text);
+  const show = (x, y) => {
+    tip.textContent = text;
+    tip.classList.add("on");
+    const r = tip.getBoundingClientRect();
+    tip.style.left = Math.max(8, Math.min(innerWidth - r.width - 8, x - r.width / 2)) + "px";
+    tip.style.top = Math.max(8, y - r.height - 12) + "px";
+  };
+  const hide = () => tip.classList.remove("on");
+  node.addEventListener("mousemove", (e) => show(e.clientX, e.clientY));
+  node.addEventListener("mouseleave", hide);
+  node.addEventListener("focus", () => { const r = node.getBoundingClientRect(); show(r.left + r.width / 2, r.top); });
+  node.addEventListener("blur", hide);
+}
+
+// ---------- Tab-Titel und Favicon zeigen den Zustand ----------
+function setTab(label, colorVar) {
+  document.title = `${label} – Digest-Status`;
+  const svg = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16"><circle cx="8" cy="8" r="6.5" fill="${css(colorVar)}"/></svg>`;
+  $("favicon").href = "data:image/svg+xml," + encodeURIComponent(svg);
 }
 
 // ---------- Kopf ----------
 function renderHead() {
-  const s = status;
-  const head = $("headline"), sub = $("subline");
+  const s = status, run = s.running, last = s.last_run;
+  const head = $("headline"), sub = $("subline"), b = $("badge");
   sub.className = "";
-  const run = s.running, last = s.last_run;
+  b.replaceChildren();
 
   if (run) {
-    const runLines = linesFrom(run);
-    const info = stageOf(runLines);
-    const since = (Date.now() - new Date(run.started)) / 1000;
-    head.textContent = `Läuft seit ${fmtDur(since)}: ${STAGES[info.idx].name}`;
-    const lastLine = runLines.at(-1);
-    const w = lastLine && lastLine.msg.match(/^(\w+): warte (\d+)s/);
+    const stage = STAGES[run.stage ?? 0];
+    head.textContent = `Läuft seit ${fmtDur((Date.now() - new Date(run.started)) / 1000)}`;
+    b.append(toggleBadge("run", stage, true));
+    const w = run.wait;
     if (w) {
-      const left = Math.max(0, +w[2] - (Date.now() / 1000 - lastLine.t));
-      sub.textContent = `${w[1]} wartet noch ${Math.ceil(left)} s, weil LLM_MIN_INTERVAL einen Abstand zwischen zwei Anfragen erzwingt.`;
+      const left = Math.max(0, w.seconds - (Date.now() / 1000 - w.t));
+      sub.textContent = `${w.provider} wartet noch ${Math.ceil(left)} s, weil LLM_MIN_INTERVAL einen Abstand zwischen zwei Anfragen erzwingt.`;
     } else {
-      sub.textContent = (info.detail || "Lauf gestartet") + (by(run) ? ` (${by(run).trim()})` : "");
+      sub.textContent = run.detail || "Lauf gestartet.";
     }
-    renderSteps("running", info, "Aktueller Lauf",
-      `Gestartet ${fmtWhen(run.started)}${by(run)}. Die blau markierte Stufe läuft gerade.`);
+    setTab(`● ${stage}`, "--brand");
   } else if (last && !last.ok) {
-    const info = stageOf(linesFrom(last));
-    head.textContent = "Der letzte Lauf ist fehlgeschlagen";
+    head.textContent = "Letzter Lauf fehlgeschlagen";
+    b.append(toggleBadge("err", "Fehler", true));
     sub.className = "err";
-    sub.textContent = `${fmtWhen(last.ended || last.started)} in Stufe „${STAGES[info.idx].name}“${by(last) ? ` (${by(last).trim()})` : ""}: ${last.error}. Details in den Logs, der nächste Lauf startet planmäßig.`;
-    renderSteps("failed", info, "Letzter Lauf",
-      `Gestartet ${fmtWhen(last.started)}${by(last)}, in der rot markierten Stufe abgebrochen.`);
+    sub.textContent = `${fmtWhen(last.ended || last.started)}${by(last)}: ${last.error}. Details in den Logs, der nächste Lauf startet planmäßig.`;
+    setTab("✕ Fehler", "--err");
   } else {
     const n = s.latest ? s.latest.items.length : 0;
     head.textContent = s.next_run ? `Ruht bis ${fmtWhen(s.next_run)}` : "Ruht";
+    b.append(toggleBadge(healthCls(), healthText(), true));
     sub.textContent = last || s.last_run_saved
       ? `Der letzte Lauf ist ohne Fehler durchgelaufen${n ? ` und hat ${n} Artikel in den Digest gebracht` : ""}.`
       : "Bisher gab es noch keinen Lauf.";
-    if (last) {
-      const info = stageOf(linesFrom(last));
-      renderSteps("done", info, "Letzter Lauf",
-        `${fmtWhen(last.started)}${by(last)} gestartet, alle Stufen erledigt in ${fmtDur(last.seconds)}.`);
-    } else {
-      renderSteps(s.last_run_saved ? "done" : "idle", null, "Letzter Lauf",
-        s.last_run_saved ? `${fmtWhen(s.last_run_saved)}, Details liegen nicht mehr in den Logs.`
-          : "Noch kein Lauf aufgezeichnet. Die Stufen füllen sich beim nächsten Lauf.");
-    }
+    setTab("Ruht", "--ok");
   }
 
-  const facts = $("facts");
-  facts.replaceChildren();
-  const add = (k, v) => facts.append(el("dt", "", k), el("dd", "", v));
-  add("Nächster Lauf", fmtWhen(s.next_run));
-  add("Feed geschrieben", fmtWhen(s.feed_updated));
-  add("Bewertung", s.models.scoring);
-  add("Auszüge", s.models.summary);
-  if (s.models.prefilter && s.models.prefilter !== "none") add("Vorfilter", s.models.prefilter);
+  const meta = $("meta");
+  meta.replaceChildren();
+  const add = (ic, text) => { const sp = el("span"); sp.append(icon(ic), text); meta.append(sp); };
+  add("clock", `Nächster Lauf ${fmtWhen(s.next_run)}`);
+  add("doc", `Feed geschrieben ${fmtWhen(s.feed_updated)}`);
+  add("chip", `Bewertung ${s.models.scoring}`);
+  add("chip", `Auszüge ${s.models.summary}`);
+  if (s.models.prefilter && s.models.prefilter !== "none") add("chip", `Vorfilter ${s.models.prefilter}`);
 }
 
-// ---------- Letzter Digest ----------
+// ---------- Kennzahlen: wie viele Artikel nach jeder Stufe übrig sind ----------
+function renderStats() {
+  const run = status.running || status.last_run;
+  const st = (run && run.stats) || {};
+  const total = st.fetched;
+  const candidates = st.prefilter_kept ?? st.kept;
+  const cards = [
+    { label: "Geholt", n: st.fetched, sub: "ungelesene Artikel aus Miniflux" },
+    { label: "Neu", n: st.kept, sub: st.kept != null ? `${num(st.already_shown)} schon im Digest gewesen` : "" },
+    { label: "Bewertet", n: candidates, sub: st.scored_new != null ? `${num(st.scored_new)} neu, ${num(st.scored_cached)} aus früheren Läufen` : "" },
+    { label: "Im Digest", n: st.chosen, sub: st.chosen != null ? (st.explore ? `davon ${st.explore} Zufallsfund` : "ausgewählt") : "" },
+  ];
+  const box = $("stats");
+  box.replaceChildren();
+  for (const c of cards) {
+    const card = el("div", "card stat");
+    const dd = el("dd");
+    dd.append(el("div", `num${c.n == null ? " none" : ""}`, c.n == null ? "–" : num(c.n)));
+    const share = c.n != null && total ? c.n / total : null;
+    dd.append(el("div", "sub", (c.sub || (status.running ? "kommt noch" : "")) +
+      (share != null && c.label !== "Geholt" ? ` · ${Math.round(share * 100)} %` : "")));
+    if (share != null) {
+      const bar = el("span", "share"), fill = el("i");
+      fill.style.width = `${Math.max(1, share * 100)}%`;
+      bar.append(fill);
+      dd.append(bar);
+    }
+    card.append(el("dt", "", c.label), dd);
+    box.append(card);
+  }
+}
+
+// ---------- Ablauf ----------
+function renderSteps() {
+  const s = status, run = s.running || s.last_run;
+  const mode = s.running ? "running" : !run ? "idle" : run.ok ? "done" : "failed";
+  $("run-h").textContent = s.running ? "Aktueller Lauf" : "Letzter Lauf";
+  $("run-caption").textContent =
+    mode === "running" ? `Gestartet ${fmtWhen(run.started)}${by(run)}.`
+    : mode === "failed" ? `Gestartet ${fmtWhen(run.started)}${by(run)}, in der rot markierten Stufe abgebrochen.`
+    : mode === "done" ? `${fmtWhen(run.started)}${by(run)} gestartet, fertig nach ${fmtDur(run.seconds)}.`
+    : "Noch kein Lauf aufgezeichnet.";
+  const st = (run && run.stats) || {};
+  const results = [
+    st.fetched != null && `${num(st.fetched)} Artikel`,
+    st.kept != null && `${num(st.kept)} übrig`,
+    st.scored_new != null && `${num(st.scored_new)} neu bewertet`,
+    st.chosen != null && `${num(st.chosen)} ausgewählt`,
+    st.topics > 0 ? `${st.topics} Themen` : st.topics === 0 ? "ohne Themen" : "",
+    st.feed_at ? `aktualisiert ${fmtTime(st.feed_at * 1000)}` : "",
+  ];
+  const stage = run ? (run.stage ?? 0) : -1;
+  const list = $("steps");
+  list.replaceChildren();
+  STAGES.forEach((name, i) => {
+    let cls = "";
+    if (mode === "done") cls = "done";
+    else if (mode === "running" || mode === "failed") cls = i < stage ? "done" : i === stage ? (mode === "running" ? "now" : "fail") : "";
+    const li = el("li", cls);
+    if (cls === "now") li.setAttribute("aria-current", "step");
+    const circle = el("span", "circle");
+    if (cls === "done") circle.append(icon("check"));
+    else if (cls === "fail") circle.append(icon("x"));
+    li.append(circle, el("div", "step-name", name),
+      el("div", "step-result", results[i] || (cls === "now" ? "läuft gerade" : cls === "fail" ? "abgebrochen" : "")));
+    list.append(li);
+  });
+}
+
+// ---------- Letzte Läufe als Tabelle ----------
+function renderRuns() {
+  const box = $("runs"), runs = (status.history || []).slice().reverse();
+  box.replaceChildren();
+  if (!runs.length) {
+    box.append(el("p", "empty", "Noch keine Läufe aufgezeichnet."));
+    return;
+  }
+  const t = el("table", "tbl");
+  const head = t.createTHead().insertRow();
+  [["Start", ""], ["Dauer", "r"], ["Im Digest", "r"], ["Status", ""]].forEach(([h, c]) => head.append(el("th", c, h)));
+  const body = t.createTBody();
+  for (const r of runs.slice(0, 8)) {
+    const row = body.insertRow();
+    const st = r.stats || {};
+    row.append(el("td", "", fmtWhen(r.started) + (r.source === "Befehl" ? " (Befehl)" : "")),
+      el("td", "r", fmtDur(r.seconds)),
+      el("td", "r", st.chosen != null ? num(st.chosen) : "–"));
+    const cell = el("td");
+    cell.append(r.ok ? badge("ok", "ok") : badge("err", "Fehler"));
+    if (!r.ok && r.error) cell.title = r.error;
+    row.append(cell);
+  }
+  box.append(t);
+}
+
+// ---------- Digest ----------
+function itemRow(it, withWhy) {
+  const li = el("li");
+  li.append(el("span", "score", it.score ?? "–"));
+  const text = el("div");
+  const title = el("div", "item-title");
+  const a = el("a", "", (it.explore ? "🎲 " : "") + (it.digest_title || it.title));
+  a.href = it.url;
+  a.rel = "noreferrer";
+  a.target = "_blank";
+  title.append(a);
+  text.append(title);
+  if (withWhy && it.why) text.append(el("p", "item-why", it.why));
+  const meta = el("div", "item-meta");
+  meta.append(el("span", "", it.feed || ""));
+  if (it.clicked) meta.append(badge("ok", "✓ angeklickt"));
+  if (it.starred) meta.append(badge("warn", "★ Stern"));
+  if (it.explore) meta.append(badge("run", "Zufallsfund"));
+  if (it.filler) meta.append(badge("gray", "Auffüller"));
+  if (it.similar_to) meta.append(badge("gray", `ähnlich zu „${it.similar_to}“`));
+  text.append(meta);
+  li.append(text);
+  return li;
+}
 function renderDigest() {
   const d = status.latest, body = $("digest-body");
   body.replaceChildren();
   if (!d) {
-    $("digest-note").textContent = "Noch kein Digest gespeichert. Der erste entsteht beim nächsten Lauf.";
-    return;
-  }
-  $("digest-note").textContent =
-    `${d.date}: ${d.items.length} von ${d.considered ?? "?"} Artikeln ausgewählt, ${status.digest_count} Digests im Feed.`;
-  let group = null, list = null;
-  for (const it of d.items) {
-    const topic = it.topic || "";
-    if (!list || topic !== group) {
-      group = topic;
-      if (topic) body.append(el("h3", "", topic));
-      list = el("ol");
-      body.append(list);
+    $("digest-h").textContent = "Letzter Digest";
+    $("digest-note").textContent = "";
+    body.append(el("p", "empty", "Noch kein Digest gespeichert. Der erste entsteht beim nächsten Lauf."));
+  } else {
+    $("digest-h").textContent = `Digest vom ${d.date}`;
+    const read = d.items.filter((it) => it.clicked).length;
+    $("digest-note").textContent = `${d.items.length} von ${d.considered ?? "?"} Artikeln ausgewählt`
+      + (read ? `, ${read} davon schon angeklickt` : "") + `. ${status.digest_count} Digests im Feed.`;
+    let group = null, list = null;
+    for (const it of d.items) {
+      const topic = it.topic || "";
+      if (!list || topic !== group) {
+        group = topic;
+        if (topic) body.append(el("div", "group", topic));
+        list = el("ul", "list");
+        body.append(list);
+      }
+      list.append(itemRow(it, true));
     }
-    const li = el("li");
-    li.append(el("span", "score", it.score ?? "–"));
-    const text = el("div");
-    const title = el("div", "item-title");
-    const a = el("a", "", (it.explore ? "🎲 " : "") + (it.digest_title || it.title));
-    a.href = it.url;
-    a.rel = "noreferrer";
-    title.append(a);
-    text.append(title);
-    if (it.why) text.append(el("p", "item-why", it.why));
-    const meta = [it.feed];
-    if (it.explore) meta.push("Zufallsfund");
-    if (it.filler) meta.push("Auffüller");
-    if (it.similar_to) meta.push(`ähnlich zu „${it.similar_to}“`);
-    text.append(el("p", "item-meta", meta.filter(Boolean).join(", ")));
-    li.append(text);
-    list.append(li);
+  }
+  const misses = status.scores.near_misses, near = $("near");
+  near.replaceChildren();
+  $("near-card").hidden = !misses.length;
+  $("near-note").textContent = `Die besten Artikel der letzten ${status.scores.near_days} Tage, die es in keinen Digest geschafft haben.`;
+  misses.forEach((it) => near.append(itemRow(it, false)));
+}
+
+// ---------- Score-Verteilung ----------
+function renderScores() {
+  const sc = status.scores, hist = $("hist"), xaxis = $("xaxis"), table = $("scores-table");
+  hist.replaceChildren(); xaxis.replaceChildren(); table.replaceChildren();
+  $("scores-note").textContent = sc.count
+    ? `${num(sc.count)} bewertete Artikel der letzten ${sc.days} Tage, je Artikel der letzte Score.`
+    : `Noch keine Bewertungen aus den letzten ${sc.days} Tagen.`;
+  const max = Math.max(...sc.buckets.map((b) => b.total), 1);
+  const head = table.createTHead().insertRow();
+  ["Score", "Artikel", "im Digest"].forEach((h) => head.append(el("th", "", h)));
+  const tbody = table.createTBody();
+  for (const b of sc.buckets) {
+    const col = el("div", "col-bar");
+    if (b.total) col.append(el("div", "count", b.total));
+    const rest = b.total - b.shown;
+    if (rest) { const e = el("div", "rest"); e.style.height = `${(86 * rest) / max}%`; col.append(e); }
+    if (b.shown) { const e = el("div", "shown"); e.style.height = `${(86 * b.shown) / max}%`; col.append(e); }
+    attachTip(col, `Score ${b.score}: ${b.total} Artikel, davon ${b.shown} im Digest`);
+    hist.append(col);
+    xaxis.append(el("span", "", b.score));
+    const row = tbody.insertRow();
+    [b.score, b.total, b.shown].forEach((v) => row.append(el("td", "", v)));
+  }
+  const line = (score, label, cls) => {
+    if (score < 1 || score > 10) return;
+    const t = el("div", `threshold ${cls}`);
+    t.style.left = `calc(${score} * (100% - 10 * var(--gap)) / 11 + ${score} * var(--gap) - var(--gap) / 2 - 1px)`;
+    t.append(el("span", "", label));
+    hist.append(t);
+  };
+  if (sc.floor_score < sc.min_score) line(sc.floor_score, `FLOOR ${sc.floor_score}`, "floor");
+  line(sc.min_score, `MIN_SCORE ${sc.min_score}`, "");
+
+  const hint = $("scores-hint"), below = sc.buckets[sc.min_score - 1];
+  hint.replaceChildren();
+  hint.hidden = !sc.count;
+  if (sc.count) {
+    const above = sc.buckets.filter((b) => b.score >= sc.min_score).reduce((n, b) => n + b.total, 0);
+    hint.append(icon("info"), el("span", "", `${above} Artikel lagen auf oder über MIN_SCORE ${sc.min_score}.`
+      + (below && below.total ? ` ${below.total} weitere liegen bei ${sc.min_score - 1}, knapp darunter; mit MIN_SCORE=${sc.min_score - 1} kämen sie in Frage.` : "")));
   }
 }
 
@@ -436,7 +751,7 @@ function renderLog() {
   const shown = visibleLines();
   box.replaceChildren();
   if (!shown.length) {
-    box.append(el("p", "empty", lines.length ? "Keine Zeilen passen zum Filter." : "Noch keine Log-Zeilen."));
+    box.append(el("p", "none", lines.length ? "Keine Zeilen passen zum Filter." : "Noch keine Log-Zeilen."));
     return;
   }
   const frag = document.createDocumentFragment();
@@ -450,6 +765,55 @@ function renderLog() {
   box.append(frag);
   if ($("follow").checked) box.scrollTop = box.scrollHeight;
 }
+
+// ---------- Dienste ----------
+let healthData = null;
+const SVC = { ok: ["ok", "ok"], warn: ["warn", "Hinweis"], err: ["err", "Fehler"], off: ["gray", "aus"], skip: ["gray", "übersprungen"] };
+const healthBad = () => healthData ? healthData.services.filter((x) => x.state === "err" || x.state === "warn") : [];
+const healthCls = () => healthBad().some((x) => x.state === "err") ? "err" : healthBad().length ? "warn" : "ok";
+const healthText = () => {
+  const bad = healthBad();
+  return !bad.length ? "Alles in Ordnung" : bad.length === 1 ? `${bad[0].name}: ${SVC[bad[0].state][1]}` : `${bad.length} Dienste mit Hinweisen`;
+};
+function renderHealth() {
+  const list = $("services");
+  list.replaceChildren();
+  if (!healthData) return;
+  const bad = healthBad();
+  $("health-note").textContent = `Geprüft ${fmtWhen(healthData.checked)}. `
+    + (bad.length ? `${bad.length} von ${healthData.services.length} brauchen Aufmerksamkeit.` : "Alle aktiven Dienste laufen.");
+  for (const x of healthData.services) {
+    const li = el("li");
+    const left = el("div", "svc");
+    left.append(el("div", "svc-name", x.name), el("div", "svc-detail", x.detail));
+    const side = el("div", "svc-side");
+    if (x.ms != null) side.append(`${x.ms} ms`);
+    const [cls, label] = SVC[x.state] || SVC.warn;
+    side.append(badge(cls, label, x.state !== "off" && x.state !== "skip"));
+    li.append(left, side);
+    list.append(li);
+  }
+}
+async function loadHealth(force) {
+  const btn = $("recheck");
+  btn.disabled = true;
+  if (!healthData) $("health-note").textContent = "Wird geprüft …";
+  try {
+    healthData = await getJSON(`/health${force ? "?force=1" : ""}`);
+  } catch (e) {
+    $("health-note").textContent = `Prüfung nicht möglich: ${e.message}`;
+  }
+  btn.disabled = false;
+  renderHealth();
+  if (status) renderHead();
+}
+function toggleHealth(b) {
+  const panel = $("health");
+  panel.hidden = !panel.hidden;
+  b.setAttribute("aria-expanded", String(!panel.hidden));
+  if (!panel.hidden) loadHealth(false);
+}
+$("recheck").addEventListener("click", () => loadHealth(true));
 
 // ---------- Abruf ----------
 async function getJSON(path) {
@@ -474,20 +838,27 @@ async function pollLogs() {
     setConn(true);
   } catch { setConn(false); }
 }
+let statusTimer = null;
 async function pollStatus() {
   try {
-    const first = !status;
+    const first = !status, wasRunning = status && status.running;
     status = await getJSON(".json");
     renderHead();
+    renderStats();
+    renderSteps();
+    renderRuns();
     renderDigest();
-    if (first || status.running) renderLog();
+    renderScores();
+    if (first || status.running || wasRunning) renderLog();
     setConn(true);
   } catch { setConn(false); }
+  clearTimeout(statusTimer);
+  statusTimer = setTimeout(pollStatus, status && status.running ? 4000 : 15000);
 }
 
-document.querySelectorAll(".seg button").forEach((b) => b.addEventListener("click", () => {
+document.querySelectorAll(".btn-group button").forEach((b) => b.addEventListener("click", () => {
   level = b.dataset.level;
-  document.querySelectorAll(".seg button").forEach((x) => x.setAttribute("aria-pressed", x === b));
+  document.querySelectorAll(".btn-group button").forEach((x) => x.setAttribute("aria-pressed", x === b));
   renderLog();
 }));
 ["q", "lastonly", "hidewait"].forEach((id) => $(id).addEventListener("input", renderLog));
@@ -496,8 +867,8 @@ $("follow").addEventListener("change", renderLog);
 (async () => {
   await pollLogs();
   await pollStatus();
+  if (location.hash === "#dienste") $("headline").nextElementSibling.querySelector("button")?.click();
   setInterval(pollLogs, 3000);
-  setInterval(pollStatus, 10000);
   setInterval(() => status && status.running && renderHead(), 1000);
 })();
 </script>
