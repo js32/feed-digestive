@@ -31,6 +31,10 @@ feed reader ──► dedupe ──► Laya (local, optional) ──► LLM scor
   of Laya's answers. A 🎲 random pick per digest keeps the filter bubble in check.
 - **Publishes a feed:** one daily digest entry, or one entry per article. Excerpts in the
   language of your choice, whatever language the original is in.
+- **Shows what it's doing:** a status page with the current run, the latest digest, how scores
+  are spread around your threshold, service checks and the live log.
+- **Tells you what left your server:** every LLM call is logged locally; `privacy-report` and the
+  status page show which articles and which parts of your profile went to which provider.
 - **Stays yours:** one Docker container, state in plain JSON files, no database, no telemetry.
 
 ## Requirements
@@ -400,22 +404,36 @@ don't touch.
 | `docker compose exec digest python -m app privacy-report [days]` | what was sent to LLM providers in the last days (default 30): calls, characters, articles, and which parts of your profile |
 | `docker compose exec digest python -m app laya-report` | evaluate each Laya question against LLM scores, clicks and stars (hit rate, correlation, overlaps, disagreements) |
 
-**Status page:** `https://your.domain/<FEED_TOKEN>/status` shows whether a run is in progress and
-in which stage (including LLM rate-limit waits), when the next run starts, the latest digest with
-scores and topics, and the live log with filters. Like the feed, it is only reachable via the secret
-path. Scheduled runs and runs started with `docker compose exec … run` both show up there; logs
-are kept in `data/status/` and survive restarts. Both kinds of run share a lock, so a manual run
-never overlaps with the scheduled one. Click the status badge (or open `…/status#dienste`) to check
-each service: feed reader login, both LLM providers (via their model list, which costs no tokens;
-skipped while a run is active), Laya, embeddings, feed file age, disk space and errors in the last
-24 hours.
+**Status page:** `https://your.domain/<FEED_TOKEN>/status`, like the feed only reachable via the
+secret path. It shows:
 
-To keep the page private, skip the nginx location and open it through an SSH tunnel instead:
-`ssh -N -L 8087:127.0.0.1:8087 user@server`, then `http://localhost:8087/<FEED_TOKEN>/status`. If you set up nginx before this page existed,
-add the `/status` location from `deploy/nginx.conf.example`.
+- whether a run is in progress, in which stage and why it waits (e.g. `LLM_MIN_INTERVAL`); the
+  browser tab title and icon show the state too
+- the numbers of the current or last run: fetched, new, scored, picked
+- the latest digest grouped by topic, with scores and which articles you clicked or starred, plus
+  the best articles that just missed it
+- how scores of the last 7 days are spread around `MIN_SCORE` and `FLOOR_SCORE`, as a hint for
+  tuning the threshold
+- the last runs with duration and result
+- what left the server in the last 7 days (see `LLM_AUDIT`)
+- the live log with filters and search
+
+Click the status badge (or open `…/status#dienste`) to check each service: feed reader login, both
+LLM providers (via their model list, which costs no tokens; skipped while a run is active), Laya,
+embeddings, feed file age, disk space and errors in the last 24 hours.
+
+Scheduled runs and runs started with `docker compose exec … run` both show up; logs are kept in
+`data/status/` and survive restarts. Both kinds of run share a lock, so a manual run never
+overlaps with the scheduled one.
+
+If you set up nginx before this page existed, add the `/status` location from
+`deploy/nginx.conf.example`. To keep the page private instead, leave nginx alone and open it
+through an SSH tunnel: `ssh -N -L 8087:127.0.0.1:8087 user@server`, then
+`http://localhost:8087/<FEED_TOKEN>/status`.
 
 State lives in `data/` as plain files: `state.json` (where the last run stopped), `digests.json`,
-`feed.xml`, the learning logs and the Laya model. Deleting `state.json` makes the next run start
+`feed.xml`, the learning logs (`history.jsonl`, `feedback.jsonl`), the LLM audit log
+(`llm_audit.jsonl`), the status page's log and run history (`status/`) and the Laya model. Deleting `state.json` makes the next run start
 over with the last `LOOKBACK_HOURS`.
 
 The container runs as an unprivileged user with a read-only filesystem, no capabilities and
