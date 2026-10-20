@@ -10,6 +10,7 @@ import time
 
 import httpx
 
+from . import audit
 from .config import OPENAI_COMPATIBLE
 
 log = logging.getLogger(__name__)
@@ -63,7 +64,9 @@ class LLM:
         return f"{self.provider}:{self.model}"
 
     # ------------------------------------------------------------------
-    def complete(self, system: str, user: str, max_tokens: int = 2000, json_mode: bool = False) -> str:
+    def complete(self, system: str, user: str, max_tokens: int = 2000, json_mode: bool = False,
+                 purpose: str = "Sonstiges") -> str:
+        audit.record(self.provider, self.model, self.base_url, purpose, system, user)
         last: Exception | None = None
         for attempt in range(5):
             _throttle(self.provider)
@@ -142,14 +145,14 @@ class LLM:
         return content
 
     # ------------------------------------------------------------------
-    def complete_json(self, system: str, user: str, max_tokens: int = 2000):
-        text = self.complete(system, user, max_tokens, json_mode=True)
+    def complete_json(self, system: str, user: str, max_tokens: int = 2000, purpose: str = "Sonstiges"):
+        text = self.complete(system, user, max_tokens, json_mode=True, purpose=purpose)
         try:
             return extract_json(text)
         except ValueError:
             log.warning("%s lieferte kein gültiges JSON, neuer Versuch", self)
             text = self.complete(system, user + "\n\nAntworte AUSSCHLIESSLICH mit gültigem JSON.", max_tokens,
-                                 json_mode=True)
+                                 json_mode=True, purpose=purpose)
             return extract_json(text)
 
 

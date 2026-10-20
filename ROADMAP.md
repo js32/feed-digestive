@@ -15,7 +15,7 @@ The goal is to send as little about *you* as possible.
 - [ ] **Leaner profile for excerpts:** send only `interests.md` to the summary model, never examples or stars
 - [ ] **Private section in `interests.md`:** a marked block (e.g. `<!-- local-only -->`) that Laya and local
       models may use but that is stripped before anything goes to a cloud provider
-- [ ] **Audit log:** optionally write every outgoing prompt to `data/llm_audit.jsonl`, plus
+- [x] **Audit log:** optionally write every outgoing prompt to `data/llm_audit.jsonl`, plus
       `python -m app privacy-report` to show what left the server in the last N days
 - [ ] **Less local tracking:** configurable retention (`HISTORY_DAYS`), and store clicks per day instead of
       with exact timestamps

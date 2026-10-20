@@ -213,6 +213,16 @@ table.tbl { width: 100%; border-collapse: collapse; font-size: 13px; }
 .tbl td:first-child { color: var(--text); font-weight: 500; }
 details.raw .tbl th, details.raw .tbl td { padding-left: 0; padding-right: 16px; }
 
+/* ---------- Datenschutz ---------- */
+.kv { list-style: none; margin: 0; padding: 0; }
+.kv li { display: flex; gap: 12px; justify-content: space-between; align-items: center; padding: 10px 24px; border-top: 1px solid var(--divide); font-size: 13px; }
+.kv li:first-child { border-top: 0; }
+.kv .k { color: var(--text); font-weight: 500; min-width: 0; overflow-wrap: anywhere; }
+.kv .k small { display: block; font-weight: 400; color: var(--text-3); font-size: 12px; }
+.kv .v { color: var(--text-2); text-align: right; flex: none; }
+.sub-head { padding: 10px 24px; background: var(--gray-bg); border-top: 1px solid var(--divide); border-bottom: 1px solid var(--divide); font-size: 12px; font-weight: 600; color: var(--text-3); }
+.foot { margin: 0; padding: 12px 24px 16px; font-size: 12px; color: var(--text-3); border-top: 1px solid var(--divide); }
+
 /* ---------- Logs ---------- */
 #logs { margin-top: 24px; }
 .toolbar { display: flex; flex-wrap: wrap; gap: 10px 16px; align-items: center; padding: 14px 24px; border-bottom: 1px solid var(--border); }
@@ -274,6 +284,7 @@ details.raw .tbl th, details.raw .tbl td { padding-left: 0; padding-right: 16px;
   .stat { padding: 16px; }
   .stat .num { font-size: 24px; }
   .card-head, .card-body { padding-left: 16px; padding-right: 16px; }
+  .kv li, .sub-head, .foot { padding-left: 16px; padding-right: 16px; }
   .list li, .group, .toolbar, .empty, .services li { padding-left: 16px; padding-right: 16px; }
   .services li { align-items: start; }
   .tbl th, .tbl td { padding-left: 16px; padding-right: 8px; }
@@ -373,6 +384,14 @@ details.raw .tbl th, details.raw .tbl td { padding-left: 0; padding-right: 16px;
           <h2 id="hist-h">Letzte Läufe</h2>
         </div>
         <div id="runs"></div>
+      </section>
+
+      <section class="card" aria-labelledby="priv-h">
+        <div class="card-head">
+          <h2 id="priv-h">Was den Server verlassen hat</h2>
+          <p id="priv-note"></p>
+        </div>
+        <div id="priv"></div>
       </section>
     </div>
   </div>
@@ -635,6 +654,59 @@ function renderRuns() {
   box.append(t);
 }
 
+// ---------- Datenschutz ----------
+function renderPrivacy() {
+  const p = status.privacy, box = $("priv");
+  box.replaceChildren();
+  if (p.mode === "off") {
+    $("priv-note").textContent = "";
+    box.append(el("p", "empty", "Das Protokoll ist ausgeschaltet (LLM_AUDIT=off)."));
+    return;
+  }
+  if (!p.calls) {
+    $("priv-note").textContent = "";
+    box.append(el("p", "empty", "Noch keine LLM-Aufrufe protokolliert. Das Protokoll beginnt mit dem nächsten Lauf."));
+    return;
+  }
+  const cloud = p.groups.filter((g) => !g.local), local = p.groups.filter((g) => g.local);
+  $("priv-note").textContent = `Letzte ${p.days} Tage: ${num(p.calls)} LLM-Aufrufe`
+    + (cloud.length ? `, ${num(p.cloud_articles)} verschiedene Artikel an Cloud-Anbieter.` : ", alles lokal.");
+  const section = (title, groups) => {
+    if (!groups.length) return;
+    box.append(el("div", "sub-head", title));
+    const ul = el("ul", "kv");
+    for (const g of groups) {
+      const li = el("li"), k = el("div", "k", `${g.purpose}: ${g.model}`);
+      k.append(el("small", "", g.host || g.provider));
+      li.append(k, el("div", "v", `${num(g.calls)} ${g.calls === 1 ? "Aufruf" : "Aufrufe"}, ${num(g.articles)} Artikel, ~${num(Math.round(g.chars / 4))} Tokens`));
+      ul.append(li);
+    }
+    box.append(ul);
+  };
+  section("An Cloud-Anbieter", cloud);
+  section("Lokal, verlässt den Server nicht", local);
+  const me = p.about_you;
+  if (me.calls) {
+    box.append(el("div", "sub-head", "Über dich"));
+    const ul = el("ul", "kv");
+    const row = (label, n, extra) => {
+      const li = el("li");
+      li.append(el("div", "k", label));
+      const v = el("div", "v");
+      v.append(n ? badge("warn", `in ${num(n)} von ${num(me.calls)} Aufrufen${extra}`) : badge("ok", "nicht gesendet"));
+      li.append(v);
+      ul.append(li);
+    };
+    row("Interessenprofil", me.interests, "");
+    row("Beispiel-Artikel", me.examples, `, bis ${me.examples_max}`);
+    row("Titel deiner Sterne", me.stars, `, bis ${me.stars_max}`);
+    box.append(ul);
+  }
+  const foot = el("p", "foot");
+  foot.append("Ausführlich: ", el("code", "", "python -m app privacy-report"));
+  box.append(foot);
+}
+
 // ---------- Digest ----------
 function itemRow(it, withWhy) {
   const li = el("li");
@@ -847,6 +919,7 @@ async function pollStatus() {
     renderStats();
     renderSteps();
     renderRuns();
+    renderPrivacy();
     renderDigest();
     renderScores();
     if (first || status.running || wasRunning) renderLog();

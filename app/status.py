@@ -295,6 +295,13 @@ def _reactions(rows: list[dict]) -> dict:
     return out
 
 
+def _privacy(s: Settings) -> dict:
+    from . import audit
+    path = s.data_dir / "llm_audit.jsonl"
+    return _jsonl_cached(path, lambda _rows: audit.summary(s.data_dir, 7)) if path.exists() \
+        else audit.summary(s.data_dir, 7)
+
+
 def snapshot(s: Settings) -> dict:
     """Alles, was die Status-Seite anzeigt – ohne Schlüssel oder Tokens."""
     state = _load(s.data_dir / "state.json", {})
@@ -317,6 +324,7 @@ def snapshot(s: Settings) -> dict:
         "feed_updated": (datetime.fromtimestamp(feed_file.stat().st_mtime, timezone.utc).isoformat()
                          if feed_file.exists() else None),
         "digest_count": len(digests),
+        "privacy": _privacy(s),
         "models": {"scoring": f"{s.scoring_provider}:{s.scoring_model}",
                    "summary": f"{s.summary_provider}:{s.summary_model}",
                    "prefilter": s.prefilter},

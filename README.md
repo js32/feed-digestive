@@ -351,6 +351,8 @@ At most 3 articles per source feed are taken, unless that's needed to reach `MIN
 | `TRACK_CLICKS` | `true` | Route digest links through `/<token>/r/<id>` and count clicks. `false` uses direct links and learns from stars only. |
 | `LEARN` | `true` | With Laya: learn weights from clicks and stars. |
 | `FEEDBACK_DAYS` | `3` | A shown article counts as "not interesting" only after this many days without a click. |
+| `LLM_AUDIT` | `on` | Log every LLM call to `data/llm_audit.jsonl`: provider, model, purpose, size, article titles and which parts of your profile went along. `full` also stores the complete prompts, `off` disables it. Read it with `privacy-report` or on the status page. |
+| `LLM_AUDIT_DAYS` | `30` | Delete audit entries older than this. |
 | `STAR_POLL_MINUTES` | `15` | Pick up new stars from the feed reader this often, in addition to each run, so they show up on the status page soon. `0` = only during runs. |
 
 ### Output feed
@@ -395,6 +397,7 @@ don't touch.
 | `docker compose exec digest python -m app dry-run` | full run without saving anything |
 | `docker compose exec digest python -m app run` | create a digest now |
 | `docker compose exec digest python -m app learn` | show learned weights |
+| `docker compose exec digest python -m app privacy-report [days]` | what was sent to LLM providers in the last days (default 30): calls, characters, articles, and which parts of your profile |
 | `docker compose exec digest python -m app laya-report` | evaluate each Laya question against LLM scores, clicks and stars (hit rate, correlation, overlaps, disagreements) |
 
 **Status page:** `https://your.domain/<FEED_TOKEN>/status` shows whether a run is in progress and

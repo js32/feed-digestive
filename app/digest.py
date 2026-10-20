@@ -12,7 +12,7 @@ from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from zoneinfo import ZoneInfo
 
-from . import feedback
+from . import audit, feedback
 from .config import Settings
 from .feed import write_feed
 from .llm import LLM, LLMError
@@ -175,7 +175,7 @@ def score(items: list[dict], llm: LLM, profile: str, batch_size: int) -> None:
         )
         try:
             result = llm.complete_json(system, f"Bewerte diese {len(batch)} Artikel:\n\n{listing}",
-                                       max_tokens=60 * len(batch) + 200)
+                                       max_tokens=60 * len(batch) + 200, purpose="Bewertung")
         except (LLMError, ValueError) as e:
             log.error("Bewertung von Batch %d fehlgeschlagen: %s", i // batch_size + 1, e)
             continue
@@ -256,7 +256,7 @@ def summarize(item: dict, llm: LLM, profile: str, lang: str) -> dict:
     user = (f"Quelle: {item['feed']}\nOriginaltitel: {item['title']}\nURL: {item['url']}\n\n"
             f"Text:\n{item['text'][:SUMMARY_INPUT_CHARS] or '(kein Text im Feed, nur Titel)'}")
     try:
-        r = llm.complete_json(system, user, max_tokens=900)
+        r = llm.complete_json(system, user, max_tokens=900, purpose="Auszug")
         item["digest_title"] = str(r.get("title") or item["title"]).strip()
         item["excerpt"] = str(r.get("excerpt") or "").strip()
         item["why"] = str(r.get("why") or item.get("score_why", "")).strip()
@@ -286,7 +286,7 @@ def group_by_topic(chosen: list[dict], llm: LLM, lang: str) -> list[dict]:
     listing = "\n".join(f"id: {n} – {it.get('digest_title') or it['title']} – {it.get('why') or ''}"
                         for n, it in enumerate(regular, 1))
     try:
-        result = llm.complete_json(TOPIC_SYSTEM.format(lang=lang), listing, max_tokens=500)
+        result = llm.complete_json(TOPIC_SYSTEM.format(lang=lang), listing, max_tokens=500, purpose="Themen")
         topics = result.get("topics") or []
     except (LLMError, ValueError, AttributeError) as e:
         log.error("Themengruppen fehlgeschlagen, Digest bleibt ungruppiert: %s", e)
@@ -514,5 +514,6 @@ def _run(s: Settings, dry_run: bool = False) -> dict | None:
     write_feed(s, digests)
     _save(state_path, {**state, **source_state, "last_run": now.isoformat()})
     feedback.prune(s.data_dir)
+    audit.prune(s.data_dir)
     log.info("Feed aktualisiert: %s", s.feed_url)
     return digest

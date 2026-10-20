@@ -6,6 +6,7 @@
   python -m app check     Verbindung zu Feedreader und LLMs testen
   python -m app learn     zeigen, was aus Klicks und Sternen gelernt wurde
   python -m app laya-report  auswerten, welche Laya-Fragen etwas taugen
+  python -m app privacy-report [Tage]  was in den letzten Tagen an LLM-Anbieter ging
 """
 from __future__ import annotations
 
@@ -21,7 +22,7 @@ from datetime import datetime, timedelta
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from zoneinfo import ZoneInfo
 
-from . import feedback, status
+from . import audit, feedback, status
 from .config import Settings
 from .digest import run
 from .feed import write_feed
@@ -198,7 +199,7 @@ def check(s: Settings) -> None:
             continue
         llm = LLM(prov, model)
         try:
-            answer = llm.complete("Antworte knapp.", "Sag nur: ok", max_tokens=20)
+            answer = llm.complete("Antworte knapp.", "Sag nur: ok", max_tokens=20, purpose="Test")
         except LLMError as e:
             raise SystemExit(f"✗ {stage}: {e}")
         print(f"✓ {stage}: {llm} antwortet: {answer.strip()[:40]!r}")
@@ -211,6 +212,7 @@ def main() -> None:
     cmd = sys.argv[1] if len(sys.argv) > 1 else "serve"
     s = Settings.from_env()
     logging.getLogger().addHandler(status.FileLog(s.data_dir))
+    audit.configure(s.data_dir)
     if cmd == "serve":
         serve(s)
     elif cmd == "run":
@@ -230,6 +232,9 @@ def main() -> None:
             labels["depth"] = "Tiefe"
             labels.update({f"penalty_{k}": "Malus " + v.get("label", k) for k, v in spec.get("penalties", {}).items()})
         print(describe(s.data_dir, s.feedback_days, labels))
+    elif cmd == "privacy-report":
+        days = int(sys.argv[2]) if len(sys.argv) > 2 and sys.argv[2].isdigit() else 30
+        print(audit.report(s.data_dir, days))
     elif cmd == "laya-report":
         from .laya_report import report
         print(report(s.data_dir, s.config_dir))
