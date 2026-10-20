@@ -351,6 +351,7 @@ At most 3 articles per source feed are taken, unless that's needed to reach `MIN
 | `TRACK_CLICKS` | `true` | Route digest links through `/<token>/r/<id>` and count clicks. `false` uses direct links and learns from stars only. |
 | `LEARN` | `true` | With Laya: learn weights from clicks and stars. |
 | `FEEDBACK_DAYS` | `3` | A shown article counts as "not interesting" only after this many days without a click. |
+| `STAR_POLL_MINUTES` | `15` | Pick up new stars from the feed reader this often, in addition to each run, so they show up on the status page soon. `0` = only during runs. |
 
 ### Output feed
 

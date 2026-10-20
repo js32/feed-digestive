@@ -46,6 +46,19 @@ def _run_safely(s: Settings, source: str = "Zeitplan") -> bool:
     return False
 
 
+def _poll_stars(s: Settings) -> None:
+    """Sterne regelmäßig übernehmen, nicht nur beim täglichen Lauf – so zeigt die Status-Seite sie bald
+    an. Während eines Laufs nicht: der übernimmt sie selbst."""
+    while True:
+        time.sleep(s.star_poll_minutes * 60)
+        if status.run_active(s.data_dir):
+            continue
+        try:
+            feedback.collect_stars(s.data_dir, make_source(s).starred(), quiet=True)
+        except Exception as e:
+            log.warning("Sterne-Abgleich fehlgeschlagen: %s", e)
+
+
 def _next_run(s: Settings) -> datetime:
     tz = ZoneInfo(s.tz)
     now = datetime.now(tz)
@@ -136,6 +149,8 @@ def serve(s: Settings) -> None:
     threading.Thread(target=httpd.serve_forever, daemon=True).start()
     log.info("Feed erreichbar unter %s (intern Port %d)", s.feed_url, s.http_port)
     log.info("Status-Seite: %s/status", s.feed_base)
+    if s.star_poll_minutes > 0 and (s.use_starred or s.learn):
+        threading.Thread(target=_poll_stars, args=(s,), daemon=True).start()
     if s.run_on_start:
         _run_safely(s)
     while True:

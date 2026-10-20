@@ -80,6 +80,7 @@ class Settings:
     track_clicks: bool = True
     learn: bool = True
     feedback_days: int = 3
+    star_poll_minutes: int = 15
     explore_slots: int = 1
     explore_min_regular: int = 4
     examples_in_prompt: int = 120
@@ -158,6 +159,7 @@ class Settings:
             track_clicks=_bool("TRACK_CLICKS", True),
             learn=_bool("LEARN", True),
             feedback_days=_int("FEEDBACK_DAYS", 3),
+            star_poll_minutes=_int("STAR_POLL_MINUTES", 15),
             explore_slots=_int("EXPLORE_SLOTS", 1),
             explore_min_regular=_int("EXPLORE_MIN_REGULAR", 4),
             examples_in_prompt=_int("EXAMPLES_IN_PROMPT", 120),

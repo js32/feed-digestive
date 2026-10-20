@@ -128,7 +128,7 @@ def lookup_url(data_dir: Path, entry_id: str) -> str | None:
 # ----------------------------------------------------------------------
 # Sterne aus dem Feedreader
 # ----------------------------------------------------------------------
-def collect_stars(data_dir: Path, starred_entries: list[dict]) -> int:
+def collect_stars(data_dir: Path, starred_entries: list[dict], quiet: bool = False) -> int:
     """Neue Sterne in feedback.jsonl übernehmen.
 
     Gezählt werden Sterne auf Original-Artikeln (gleiche Quell-ID wie im Protokoll) und
@@ -147,6 +147,6 @@ def collect_stars(data_dir: Path, starred_entries: list[dict]) -> int:
                 known.add(eid)
                 new.append({"ts": now, "entry_id": eid, "kind": "star"})
     _append(data_dir / "feedback.jsonl", new)
-    if new:
-        log.info("%d neue Sterne übernommen", len(new))
+    if new or not quiet:  # beim Lauf immer, beim regelmäßigen Abgleich nur wenn sich etwas tut
+        log.info("Sterne: %d im Feedreader, %d neu übernommen", len(starred_entries), len(new))
     return len(new)

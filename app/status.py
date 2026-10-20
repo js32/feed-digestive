@@ -142,7 +142,7 @@ WAIT_RE = re.compile(r"^(\w+): warte (\d+)s \(LLM_MIN_INTERVAL\)$")
 def progress(data_dir: Path, run: dict) -> dict | None:
     """Stufe, Kennzahlen und letzte Meldung eines Laufs – None, wenn seine Zeilen nicht mehr im Log sind."""
     gen, _ = _log_pos(data_dir)
-    if not run or run.get("gen") != gen:
+    if not run or not gen or run.get("gen") != gen:
         return None
     lines = [ln for ln in _read_lines(data_dir, run["first_log"])[0] if ln.get("pid") == run.get("pid")]
     stage, stats, detail, wait = 0, {}, "", None
@@ -203,6 +203,10 @@ def tracked(s: Settings, source: str):
         _save(d / "run.json", {"current": None, "last": last, "history": history})
         fcntl.flock(lock, fcntl.LOCK_UN)
         lock.close()
+
+
+def run_active(data_dir: Path) -> bool:
+    return _run_active(_dir(data_dir))
 
 
 def _run_active(d: Path) -> bool:
