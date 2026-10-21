@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import os
+import re
 from dataclasses import dataclass, field
 from pathlib import Path
 
@@ -84,6 +85,7 @@ class Settings:
     explore_slots: int = 1
     explore_min_regular: int = 4
     examples_in_prompt: int = 120
+    summary_profile: str = "full"
 
     # Auswahl / Ausgabe
     top_n: int = 10
@@ -163,6 +165,7 @@ class Settings:
             explore_slots=_int("EXPLORE_SLOTS", 1),
             explore_min_regular=_int("EXPLORE_MIN_REGULAR", 4),
             examples_in_prompt=_int("EXAMPLES_IN_PROMPT", 120),
+            summary_profile=(_env("SUMMARY_PROFILE", "full") or "full").lower(),
             top_n=_int("TOP_N", 10),
             min_score=_int("MIN_SCORE", 6),
             min_items=_int("MIN_ITEMS", 5),
@@ -180,8 +183,26 @@ class Settings:
             data_dir=Path(_env("DATA_DIR", "/data") or "/data"),
             config_dir=Path(_env("CONFIG_DIR", "/config") or "/config"),
         )
+        s._apply_articles(_env("ARTICLES", "") or "")
         s.validate()
         return s
+
+    def _apply_articles(self, value: str) -> None:
+        """ARTICLES=8-10: mindestens 8, höchstens 10 Artikel pro Digest, Zufallsfund eingerechnet.
+        ARTICLES=10: immer bis zu 10. Ersetzt TOP_N und MIN_ITEMS."""
+        value = value.replace(" ", "")
+        if not value:
+            return
+        m = re.fullmatch(r"(\d+)(?:-(\d+))?", value)
+        if not m:
+            raise SystemExit(f"ARTICLES={value!r} verstehe ich nicht – Beispiel: ARTICLES=8-10")
+        lo, hi = int(m.group(1)), int(m.group(2) or m.group(1))
+        if not 1 <= lo <= hi:
+            raise SystemExit(f"ARTICLES={value}: erst die kleinere, dann die größere Zahl, z. B. 8-10")
+        self.top_n = hi
+        # MIN_ITEMS zählt nur reguläre Artikel; der Zufallsfund kommt erst ab EXPLORE_MIN_REGULAR dazu
+        regular = lo - self.explore_slots
+        self.min_items = regular if regular >= self.explore_min_regular else lo
 
     def validate(self) -> None:
         errors = []
@@ -197,6 +218,8 @@ class Settings:
                     errors.append(f"{key} fehlt")
         else:
             errors.append("SOURCE muss 'miniflux' oder 'greader' sein")
+        if self.summary_profile not in ("full", "lean"):
+            errors.append("SUMMARY_PROFILE muss 'full' oder 'lean' sein")
         if self.select_from not in ("unread", "new"):
             errors.append("SELECT_FROM muss 'unread' oder 'new' sein")
         if self.prefilter not in ("none", "laya"):

@@ -51,13 +51,22 @@ def _save(path: Path, data) -> None:
 # ----------------------------------------------------------------------
 # Profil
 # ----------------------------------------------------------------------
-def build_profile(s: Settings, starred: list[str]) -> str:
+LOCAL_ONLY_RE = re.compile(r"<!--\s*local-only\s*-->.*?<!--\s*/local-only\s*-->", re.S | re.I)
+
+
+def build_profile(s: Settings, starred: list[str], full: bool = True, local: bool = False) -> str:
+    """Interessen, Beispiele und Sterne für den Prompt. full=False: nur interests.md.
+    Was in interests.md zwischen <!-- local-only --> und <!-- /local-only --> steht, bekommen
+    nur lokale Modelle (Ollama), nie ein Cloud-Anbieter."""
     parts = []
     interests = s.config_dir / "interests.md"
     if interests.exists():
-        parts.append(interests.read_text(encoding="utf-8"))
+        text = interests.read_text(encoding="utf-8")
+        parts.append(text if local else LOCAL_ONLY_RE.sub("", text).strip())
     else:
         log.warning("%s fehlt – Bewertung ohne Interessenprofil", interests)
+    if not full:
+        return "\n\n".join(parts)
     examples = s.config_dir / "examples.txt"
     if examples.exists() and s.examples_in_prompt > 0:
         lines = [l for l in examples.read_text(encoding="utf-8").splitlines() if l and not l.startswith("#")]
@@ -383,8 +392,9 @@ def _run(s: Settings, dry_run: bool = False) -> dict | None:
             from .learn import retrain
             learner = retrain(s.data_dir, s.feedback_days)
         starred = [f"{e['feed_title']}: {e['title']}" for e in starred_entries[:30]] if s.use_starred else []
-        profile = build_profile(s, starred)
         summarizer = LLM(s.summary_provider, s.summary_model)
+        # Auszüge brauchen ggf. nur die Interessen (SUMMARY_PROFILE=lean), nicht Beispiele und Sterne
+        summary_profile = build_profile(s, starred, full=s.summary_profile == "full", local=summarizer.is_local)
 
         # Stufe 0 (optional): lokaler Vorfilter mit Laya, schickt nichts nach außen
         if s.prefilter == "laya":
@@ -419,7 +429,7 @@ def _run(s: Settings, dry_run: bool = False) -> dict | None:
             log.info("Bewerte %d Artikel mit %s (%d aus früheren Läufen), Auszüge mit %s",
                      len(todo), scorer, len(items) - len(todo), summarizer)
             if todo:
-                score(todo, scorer, profile, s.scoring_batch_size)
+                score(todo, scorer, build_profile(s, starred, local=scorer.is_local), s.scoring_batch_size)
                 for it in todo:
                     if it.get("score") is not None:
                         it["_fresh"] = True
@@ -458,7 +468,7 @@ def _run(s: Settings, dry_run: bool = False) -> dict | None:
 
         workers = max(1, int(os.environ.get("SUMMARY_PARALLEL", "4") or 4))
         with ThreadPoolExecutor(max_workers=workers) as pool:
-            chosen = list(pool.map(lambda it: summarize(it, summarizer, profile, s.output_language), chosen))
+            chosen = list(pool.map(lambda it: summarize(it, summarizer, summary_profile, s.output_language), chosen))
 
         if emb and s.similar_min > 0 and starred_entries:
             from .embed import nearest

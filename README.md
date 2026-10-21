@@ -192,7 +192,9 @@ On a CPU-only server a run can take an hour or more. It runs at night, so that's
 Your personal profile lives in `config/`, which is git-ignored. The repo only ships templates in
 `config.example/`.
 
-- `config/interests.md`: topics, priorities, what you don't want. Re-read on every run.
+- `config/interests.md`: topics, priorities, what you don't want. Re-read on every run. Anything
+  between `<!-- local-only -->` and `<!-- /local-only -->` is only given to local models (Ollama)
+  and stripped before a prompt goes to a cloud provider.
 - `config/examples.txt`: articles you saved in the past, as examples for the LLM. Generate from a
   read-later export (JSON list with `link` and `tags`):
   ```bash
@@ -313,6 +315,7 @@ The questions Laya asks are in `config/laya_questions.json`.
 | `SUMMARY_MODEL` | – | Model name for the excerpts, e.g. `mistral-medium-latest`. |
 | `SCORING_BATCH_SIZE` | `40` | Articles per scoring call. Use 10–15 for small local models. |
 | `EXAMPLES_IN_PROMPT` | `120` | How many lines of `config/examples.txt` are sent along. `0` keeps your reading history private. |
+| `SUMMARY_PROFILE` | `full` | What the excerpt model gets about you. `full`: interests, examples and starred titles. `lean`: only `interests.md` – fewer tokens and less personal data; scoring is unaffected. |
 | `USE_MINIFLUX_STARRED` | `true` | Send the titles of your 30 latest starred articles along as an interest signal (works for both sources). Stars are still used for local learning when `false`. |
 | `OUTPUT_LANGUAGE` | `Deutsch` | Language of titles, excerpts and "why read", regardless of the article's language. |
 | `LLM_MIN_INTERVAL` | `0` | Minimum seconds between two LLM calls. For free tiers with ~2 requests/minute use `31`. |
@@ -338,6 +341,7 @@ API keys and endpoints (only the ones for your provider are needed):
 
 | Setting | Default | Description |
 |---|---|---|
+| `ARTICLES` | – | Shortcut for `TOP_N` and `MIN_ITEMS`: `8-10` means at least 8, at most 10 articles per digest, random pick included; `10` means up to 10 every day. Wins over `TOP_N`/`MIN_ITEMS` when set. |
 | `TOP_N` | `10` | Maximum number of articles per digest. |
 | `MIN_SCORE` | `6` | Articles scoring at least this (0–10) always go in, up to `TOP_N`. |
 | `MIN_ITEMS` | `5` | Minimum per digest: if fewer reach `MIN_SCORE`, the next best are added and marked as topped up. `0` never tops up. |

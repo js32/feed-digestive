@@ -68,6 +68,10 @@ class LLM:
     def __repr__(self) -> str:
         return f"{self.provider}:{self.model}"
 
+    @property
+    def is_local(self) -> bool:
+        return audit.is_local(self.provider, self.base_url)
+
     # ------------------------------------------------------------------
     def complete(self, system: str, user: str, max_tokens: int = 2000, json_mode: bool = False,
                  purpose: str = "Sonstiges") -> str:
