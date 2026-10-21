@@ -463,7 +463,7 @@ function toggleBadge(cls, text, pip) {
 const css = (name) => getComputedStyle(document.documentElement).getPropertyValue(name).trim();
 
 const STAGES = ["Holen", "Filtern", "Bewerten", "Auswählen", "Auszüge & Themen", "Feed"];
-const WAIT = /: warte \d+s \(LLM_MIN_INTERVAL\)$/;
+const WAIT = /: warte \d+s \((LLM_MIN_INTERVAL|Rate-Limit)\)$/;
 
 let lines = [], seq = 0, gen = 0, status = null, level = "all";
 
@@ -528,7 +528,9 @@ function renderHead() {
     const w = run.wait;
     if (w) {
       const left = Math.max(0, w.seconds - (Date.now() / 1000 - w.t));
-      sub.textContent = `${w.provider} wartet noch ${Math.ceil(left)} s, weil LLM_MIN_INTERVAL einen Abstand zwischen zwei Anfragen erzwingt.`;
+      sub.textContent = `${w.provider} wartet noch ${Math.ceil(left)} s, ` + (w.reason === "Rate-Limit"
+        ? "weil der Anbieter nur begrenzt viele Anfragen pro Minute erlaubt."
+        : "weil LLM_MIN_INTERVAL einen Abstand zwischen zwei Anfragen erzwingt.");
     } else {
       sub.textContent = run.detail || "Lauf gestartet.";
     }

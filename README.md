@@ -290,7 +290,7 @@ are never shown again.
 | `LAYA_MODEL` | `auto` | `auto`: English articles to the English checkpoint, others to the multilingual one. `multilingual` or `english`: one model for all (less RAM). |
 | `LAYA_MAX_LEN` | `1024` | Maximum tokens per article Laya reads. Lower (e.g. 512) is faster and uses less RAM. |
 | `LAYA_BATCH_SIZE` | `8` | Articles per forward pass. Lower (e.g. 2) uses less RAM. |
-| `LAYA_THREADS` | `0` | CPU threads for Laya. `0` lets PyTorch decide; set to your core count if only one core is busy. |
+| `LAYA_THREADS` | `0` | CPU threads for Laya. `0` = the cores this container may use (from the Docker `cpus:` limit). |
 | `LAYA_CHUNK` | `32` | Progress is logged and results are saved every N articles, so an aborted run loses nothing. |
 | `LAYA_DEVICE` | – | `cpu`, `cuda` or `xpu`. Empty lets Laya choose. |
 
@@ -318,7 +318,7 @@ The questions Laya asks are in `config/laya_questions.json`.
 | `SUMMARY_PROFILE` | `full` | What the excerpt model gets about you. `full`: interests, examples and starred titles. `lean`: only `interests.md` – fewer tokens and less personal data; scoring is unaffected. |
 | `USE_MINIFLUX_STARRED` | `true` | Send the titles of your 30 latest starred articles along as an interest signal (works for both sources). Stars are still used for local learning when `false`. |
 | `OUTPUT_LANGUAGE` | `Deutsch` | Language of titles, excerpts and "why read", regardless of the article's language. |
-| `LLM_MIN_INTERVAL` | `0` | Minimum seconds between two LLM calls. For free tiers with ~2 requests/minute use `31`. |
+| `LLM_MIN_INTERVAL` | `0` | Fixed minimum seconds between two LLM calls. Usually not needed: after the first "too many requests" (HTTP 429) the app learns the required gap itself (from `Retry-After`, otherwise doubling from 5 s) and keeps it until restart. |
 | `SUMMARY_PARALLEL` | `4` | Excerpts written in parallel. `1` for rate-limited free tiers. |
 | `REASONING_EFFORT` | – | Sent as `reasoning_effort` to OpenAI-compatible APIs. `none` turns thinking off on hybrid models (Mistral Small 4, Medium 3.5), saving output tokens. Models that reject the parameter (e.g. Mistral Large 3) are retried once without it, so it is safe to set for both stages. Thinking blocks are always dropped from the answer. |
 | `LLM_TIMEOUT` | `120` / `900` | Seconds per call. Default is 900 for `ollama` and `custom`, 120 for cloud APIs. |

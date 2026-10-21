@@ -36,10 +36,11 @@ class LayaFilter:
                 "PREFILTER=laya, aber das Paket 'laya' ist nicht installiert. "
                 "Image mit  docker compose build --build-arg WITH_LAYA=1  bauen."
             ) from e
-        threads = int(os.environ.get("LAYA_THREADS", "0") or 0)
-        if threads > 0:  # im Container erkennt PyTorch die Kerne nicht immer richtig
-            import torch
-            torch.set_num_threads(threads)
+        # im Container erkennt PyTorch die freigegebenen Kerne nicht immer richtig
+        threads = int(os.environ.get("LAYA_THREADS", "0") or 0) or available_cpus()
+        import torch
+        torch.set_num_threads(threads)
+        log.info("Laya: %d CPU-Threads", threads)
         self.on_chunk = on_chunk  # wird nach jedem Block mit den fertigen Artikeln aufgerufen
         self.spec = load_questions(questions_file)
         # "auto": Laya erkennt die Sprache je Artikel – Englisch -> genaueres englisches
@@ -153,6 +154,27 @@ class LayaFilter:
             if self.on_chunk:
                 self.on_chunk(chunk)
         log.info("Laya-Modelle: %s", ", ".join(f"{m} {n}×" for m, n in sorted(used.items())))
+
+
+def available_cpus() -> int:
+    """Kerne, die dieser Container nutzen darf: cgroup-Grenze (docker cpus:), sonst CPU-Zuteilung."""
+    try:  # cgroup v2: "200000 100000" = 2 Kerne, "max 100000" = keine Grenze
+        quota, period = Path("/sys/fs/cgroup/cpu.max").read_text().split()
+        if quota != "max":
+            return max(1, round(int(quota) / int(period)))
+    except (OSError, ValueError):
+        pass
+    try:  # cgroup v1
+        quota = int(Path("/sys/fs/cgroup/cpu/cpu.cfs_quota_us").read_text())
+        period = int(Path("/sys/fs/cgroup/cpu/cpu.cfs_period_us").read_text())
+        if quota > 0:
+            return max(1, round(quota / period))
+    except (OSError, ValueError):
+        pass
+    try:
+        return max(1, len(os.sched_getaffinity(0)))
+    except AttributeError:
+        return max(1, os.cpu_count() or 1)
 
 
 def load_questions(path: Path) -> dict:

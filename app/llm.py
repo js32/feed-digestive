@@ -20,20 +20,36 @@ class LLMError(RuntimeError):
     pass
 
 
-# Gemeinsame Drossel pro Anbieter (gilt über Threads und LLM-Instanzen hinweg),
-# z. B. für Gratis-Tarife mit ~2 Anfragen/Minute: LLM_MIN_INTERVAL=31
+# Gemeinsame Drossel pro Anbieter (gilt über Threads und LLM-Instanzen hinweg). Den Abstand lernt
+# die App selbst, sobald der Anbieter "zu viele Anfragen" (HTTP 429) meldet; LLM_MIN_INTERVAL setzt
+# optional einen festen Mindestabstand von Anfang an.
 _throttle_lock = threading.Lock()
 _last_call: dict[str, float] = {}
+_learned: dict[str, float] = {}
+LEARNED_MAX = 65  # mehr als gut eine Minute Abstand braucht kein Tarif
+
+
+def _learn_rate_limit(provider: str, retry_after: str) -> None:
+    """Nach einem 429 den Abstand für diesen Anbieter erhöhen – für den Rest der Laufzeit."""
+    with _throttle_lock:
+        old = _learned.get(provider, 0.0)
+        new = float(retry_after) if retry_after.isdigit() else old * 2 or 5.0
+        new = min(LEARNED_MAX, max(old, new))
+        if new > old:
+            _learned[provider] = new
+            log.info("%s: Rate-Limit erreicht, ab jetzt mindestens %.0fs zwischen zwei Anfragen", provider, new)
 
 
 def _throttle(provider: str) -> None:
-    interval = float(os.environ.get("LLM_MIN_INTERVAL", "0") or 0)
+    fixed, learned = float(os.environ.get("LLM_MIN_INTERVAL", "0") or 0), _learned.get(provider, 0.0)
+    interval = max(fixed, learned)
     if interval <= 0:
         return
+    reason = "Rate-Limit" if learned > fixed else "LLM_MIN_INTERVAL"
     with _throttle_lock:
         wait = _last_call.get(provider, 0) + interval - time.monotonic()
         if wait > 0:
-            log.info("%s: warte %.0fs (LLM_MIN_INTERVAL)", provider, wait)
+            log.info("%s: warte %.0fs (%s)", provider, wait, reason)
             time.sleep(wait)
         _last_call[provider] = time.monotonic()
 
@@ -89,6 +105,8 @@ class LLM:
                 if code in (429, 500, 502, 503, 504, 529):
                     wait = min(60, 2 ** attempt * 3)
                     retry_after = e.response.headers.get("retry-after", "")
+                    if code == 429:
+                        _learn_rate_limit(self.provider, retry_after)
                     if retry_after.isdigit():  # Vorgabe des Anbieters respektieren
                         wait = min(120, max(wait, int(retry_after)))
                     log.warning("%s: HTTP %s, neuer Versuch in %ss", self, code, wait)

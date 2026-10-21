@@ -136,7 +136,7 @@ STATS = [  # Muster -> Kennzahlen
     (re.compile(r"^Bewerte (\d+) Artikel .*\((\d+) aus früheren"), ("scored_new", "scored_cached")),
     (re.compile(r"^(\d+) Artikel ausgewählt \(davon (\d+) Zufallsfund\)"), ("chosen", "explore")),
 ]
-WAIT_RE = re.compile(r"^(\w+): warte (\d+)s \(LLM_MIN_INTERVAL\)$")
+WAIT_RE = re.compile(r"^(\w+): warte (\d+)s \((LLM_MIN_INTERVAL|Rate-Limit)\)$")
 
 
 def progress(data_dir: Path, run: dict) -> dict | None:
@@ -162,7 +162,7 @@ def progress(data_dir: Path, run: dict) -> dict | None:
         elif msg.startswith("Feed aktualisiert"):
             stats["feed_at"] = ln["t"]
         m = WAIT_RE.match(msg)
-        wait = {"provider": m.group(1), "seconds": int(m.group(2)), "t": ln["t"]} if m else None
+        wait = {"provider": m.group(1), "seconds": int(m.group(2)), "t": ln["t"], "reason": m.group(3)} if m else None
         if not m:
             detail = msg.split("\n", 1)[0]
     return {"stage": stage, "stats": stats, "detail": detail, "wait": wait}
