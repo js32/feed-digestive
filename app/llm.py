@@ -59,6 +59,11 @@ class LLM:
             self.api_key = os.environ.get(key_env, "")
             if not self.api_key and provider not in ("ollama", "custom"):
                 raise SystemExit(f"{key_env} fehlt")
+        key_env = "ANTHROPIC_API_KEY" if provider == "anthropic" else OPENAI_COMPATIBLE[provider][1]
+        if self.api_key and (not self.api_key.isascii() or self.api_key.startswith("<") or " " in self.api_key.strip()):
+            # sonst bricht httpx später mit einem kryptischen UnicodeEncodeError im Header ab
+            raise SystemExit(f"{key_env} sieht nicht wie ein Schlüssel aus (Umlaute, Leerzeichen oder <Platzhalter>?) "
+                             "– bitte den echten Schlüssel in die .env eintragen")
 
     def __repr__(self) -> str:
         return f"{self.provider}:{self.model}"
