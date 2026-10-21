@@ -40,6 +40,16 @@ def _learn_rate_limit(provider: str, retry_after: str) -> None:
             log.info("%s: Rate-Limit erreicht, ab jetzt mindestens %.0fs zwischen zwei Anfragen", provider, new)
 
 
+def reset_rate_limits() -> None:
+    """Gelernte Abstände vergessen – nach jedem Lauf, damit ein kurzer Engpass nicht alle
+    folgenden Läufe bremst. Der Server-Prozess läuft ja tagelang."""
+    with _throttle_lock:
+        if _learned:
+            log.info("Gelernte Rate-Limits zurückgesetzt: %s",
+                     ", ".join(f"{p} {v:.0f}s" for p, v in sorted(_learned.items())))
+        _learned.clear()
+
+
 def _throttle(provider: str) -> None:
     fixed, learned = float(os.environ.get("LLM_MIN_INTERVAL", "0") or 0), _learned.get(provider, 0.0)
     interval = max(fixed, learned)

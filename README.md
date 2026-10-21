@@ -318,7 +318,7 @@ The questions Laya asks are in `config/laya_questions.json`.
 | `SUMMARY_PROFILE` | `full` | What the excerpt model gets about you. `full`: interests, examples and starred titles. `lean`: only `interests.md` – fewer tokens and less personal data; scoring is unaffected. |
 | `USE_MINIFLUX_STARRED` | `true` | Send the titles of your 30 latest starred articles along as an interest signal (works for both sources). Stars are still used for local learning when `false`. |
 | `OUTPUT_LANGUAGE` | `Deutsch` | Language of titles, excerpts and "why read", regardless of the article's language. |
-| `LLM_MIN_INTERVAL` | `0` | Fixed minimum seconds between two LLM calls. Usually not needed: after the first "too many requests" (HTTP 429) the app learns the required gap itself (from `Retry-After`, otherwise doubling from 5 s) and keeps it until restart. |
+| `LLM_MIN_INTERVAL` | `0` | Fixed minimum seconds between two LLM calls. Usually not needed: after the first "too many requests" (HTTP 429) the app learns the required gap itself (from `Retry-After`, otherwise doubling from 5 s) and keeps it for the rest of the run. |
 | `SUMMARY_PARALLEL` | `4` | Excerpts written in parallel. `1` for rate-limited free tiers. |
 | `REASONING_EFFORT` | – | Sent as `reasoning_effort` to OpenAI-compatible APIs. `none` turns thinking off on hybrid models (Mistral Small 4, Medium 3.5), saving output tokens. Models that reject the parameter (e.g. Mistral Large 3) are retried once without it, so it is safe to set for both stages. Thinking blocks are always dropped from the answer. |
 | `LLM_TIMEOUT` | `120` / `900` | Seconds per call. Default is 900 for `ollama` and `custom`, 120 for cloud APIs. |

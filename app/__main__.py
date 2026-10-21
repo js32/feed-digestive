@@ -26,7 +26,7 @@ from . import audit, feedback, status
 from .config import Settings
 from .digest import run
 from .feed import write_feed
-from .llm import LLM, LLMError
+from .llm import LLM, LLMError, reset_rate_limits
 from .sources import make_source
 
 log = logging.getLogger("feed-digestive")
@@ -44,6 +44,8 @@ def _run_safely(s: Settings, source: str = "Zeitplan") -> bool:
         log.error("%s", e)
     except Exception:
         log.exception("Lauf fehlgeschlagen")
+    finally:
+        reset_rate_limits()
     return False
 
 
