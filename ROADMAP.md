@@ -11,14 +11,14 @@ The goal is to send as little about *you* as possible.
 - [x] Laya as a local pre-filter, so only a small share of articles reaches the LLM
 - [x] `EXAMPLES_IN_PROMPT=0` keeps your reading history out of the prompt
 - [x] `USE_MINIFLUX_STARRED=false` keeps starred titles out of the prompt (stars still count for local learning)
-- [ ] **Privacy preset** `PRIVACY=strict`: one switch that sets the options above and everything below
-- [ ] **Leaner profile for excerpts:** send only `interests.md` to the summary model, never examples or stars
-- [ ] **Private section in `interests.md`:** a marked block (e.g. `<!-- local-only -->`) that Laya and local
+- [x] **Privacy preset** `PRIVACY=strict`: no examples, no starred titles, lean excerpt prompts, clicks stored per day
+- [x] **Leaner profile for excerpts:** `SUMMARY_PROFILE=lean` sends only `interests.md` to the summary model
+- [x] **Private section in `interests.md`:** a marked block (e.g. `<!-- local-only -->`) that Laya and local
       models may use but that is stripped before anything goes to a cloud provider
 - [x] **Audit log:** optionally write every outgoing prompt to `data/llm_audit.jsonl`, plus
       `python -m app privacy-report` to show what left the server in the last N days
-- [ ] **Less local tracking:** configurable retention (`HISTORY_DAYS`), and store clicks per day instead of
-      with exact timestamps
+- [ ] **Less local tracking:** clicks per day is done (`PRIVACY=strict`). Shorter retention is open: clicks and
+      the history log must be pruned together, and not below `UNREAD_MAX_AGE_DAYS`, or learning and de-duplication break
 - [ ] **Fully local mode** documented end to end (Laya + Ollama), with realistic hardware requirements
 - [ ] Notes per provider on data retention and training opt-out (Mistral, Anthropic, OpenAI, …)
 - [x] `REASONING_EFFORT=none` turns off paid "thinking" tokens on hybrid models (Mistral Small 4, Medium 3.5)

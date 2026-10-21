@@ -104,9 +104,12 @@ def is_human(user_agent: str | None) -> bool:
     return bool(user_agent) and not BOT_RE.search(user_agent)
 
 
-def record_click(data_dir: Path, entry_id: str) -> None:
-    _append(data_dir / "feedback.jsonl", [{
-        "ts": datetime.now(timezone.utc).isoformat(), "entry_id": entry_id, "kind": "click"}])
+def record_click(data_dir: Path, entry_id: str, day_only: bool = False) -> None:
+    """day_only (PRIVACY=strict): nur das Datum speichern, nicht die Uhrzeit des Klicks."""
+    now = datetime.now(timezone.utc)
+    if day_only:
+        now = now.replace(hour=0, minute=0, second=0, microsecond=0)
+    _append(data_dir / "feedback.jsonl", [{"ts": now.isoformat(), "entry_id": entry_id, "kind": "click"}])
 
 
 def lookup_url(data_dir: Path, entry_id: str) -> str | None:

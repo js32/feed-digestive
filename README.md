@@ -359,6 +359,7 @@ At most 3 articles per source feed are taken, unless that's needed to reach `MIN
 | `TRACK_CLICKS` | `true` | Route digest links through `/<token>/r/<id>` and count clicks. `false` uses direct links and learns from stars only. |
 | `LEARN` | `true` | With Laya: learn weights from clicks and stars. |
 | `FEEDBACK_DAYS` | `3` | A shown article counts as "not interesting" only after this many days without a click. |
+| `PRIVACY` | `standard` | `strict` sends as little about you as possible: only `interests.md` (without its `local-only` part) goes to cloud providers – no examples (`EXAMPLES_IN_PROMPT=0`), no starred titles (`USE_MINIFLUX_STARRED=false`), lean excerpt prompts (`SUMMARY_PROFILE=lean`) – and clicks are stored with their date only. Stars and clicks still train the local model. Any of these set individually in `.env` wins. Scoring gets a bit less precise without examples. |
 | `LLM_AUDIT` | `on` | Log every LLM call to `data/llm_audit.jsonl`: provider, model, purpose, size, article titles and which parts of your profile went along. `full` also stores the complete prompts, `off` disables it. Read it with `privacy-report` or on the status page. |
 | `LLM_AUDIT_DAYS` | `30` | Delete audit entries older than this. |
 | `STAR_POLL_MINUTES` | `15` | Pick up new stars from the feed reader this often, in addition to each run, so they show up on the status page soon. `0` = only during runs. |

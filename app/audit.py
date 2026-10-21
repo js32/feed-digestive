@@ -175,6 +175,8 @@ def report(data_dir: Path, days: int = 30) -> str:
                 f"  Beispiele (examples.txt):         in {me['examples']} Aufrufen, bis zu {me['examples_max']} Einträge",
                 f"  Titel deiner Sterne:              in {me['stars']} Aufrufen, bis zu {me['stars_max']} Titel", ""]
         tips = []
+        if me["stars"] or me["examples"]:
+            tips.append("PRIVACY=strict schickt nur noch interests.md mit, keine Beispiele und keine Stern-Titel.")
         if me["stars"]:
             tips.append("USE_MINIFLUX_STARRED=false hält deine Stern-Titel aus den Prompts (lokales Lernen bleibt).")
         if me["examples"]:

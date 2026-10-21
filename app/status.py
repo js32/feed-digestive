@@ -324,7 +324,7 @@ def snapshot(s: Settings) -> dict:
         "feed_updated": (datetime.fromtimestamp(feed_file.stat().st_mtime, timezone.utc).isoformat()
                          if feed_file.exists() else None),
         "digest_count": len(digests),
-        "privacy": _privacy(s),
+        "privacy": {**_privacy(s), "preset": s.privacy},
         "models": {"scoring": f"{s.scoring_provider}:{s.scoring_model}",
                    "summary": f"{s.summary_provider}:{s.summary_model}",
                    "prefilter": s.prefilter},

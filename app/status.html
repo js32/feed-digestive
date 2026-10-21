@@ -671,7 +671,7 @@ function renderPrivacy() {
     return;
   }
   const cloud = p.groups.filter((g) => !g.local), local = p.groups.filter((g) => g.local);
-  $("priv-note").textContent = `Letzte ${p.days} Tage: ${num(p.calls)} LLM-Aufrufe`
+  $("priv-note").textContent = (p.preset === "strict" ? "PRIVACY=strict. " : "") + `Letzte ${p.days} Tage: ${num(p.calls)} LLM-Aufrufe`
     + (cloud.length ? `, ${num(p.cloud_articles)} verschiedene Artikel an Cloud-Anbieter.` : ", alles lokal.");
   const section = (title, groups) => {
     if (!groups.length) return;

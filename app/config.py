@@ -86,6 +86,7 @@ class Settings:
     explore_min_regular: int = 4
     examples_in_prompt: int = 120
     summary_profile: str = "full"
+    privacy: str = "standard"
 
     # Auswahl / Ausgabe
     top_n: int = 10
@@ -124,7 +125,11 @@ class Settings:
 
     @classmethod
     def from_env(cls) -> "Settings":
+        # PRIVACY=strict ändert nur Standardwerte – was in der .env einzeln steht, gilt weiterhin
+        privacy = (_env("PRIVACY", "standard") or "standard").lower()
+        strict = privacy == "strict"
         s = cls(
+            privacy=privacy,
             source=(_env("SOURCE", "miniflux") or "miniflux").lower(),
             greader_url=(_env("GREADER_URL") or "").rstrip("/"),
             greader_user=_env("GREADER_USER", "") or "",
@@ -141,7 +146,7 @@ class Settings:
             only_unread=_bool("ONLY_UNREAD", False),
             category_ids=_list("CATEGORY_IDS"),
             exclude_feed_ids=_list("EXCLUDE_FEED_IDS"),
-            use_starred=_bool("USE_MINIFLUX_STARRED", True),
+            use_starred=_bool("USE_MINIFLUX_STARRED", not strict),
             scoring_provider=(_env("SCORING_PROVIDER", "anthropic") or "").lower(),
             scoring_model=_env("SCORING_MODEL", "") or "",
             summary_provider=(_env("SUMMARY_PROVIDER", "anthropic") or "").lower(),
@@ -164,8 +169,8 @@ class Settings:
             star_poll_minutes=_int("STAR_POLL_MINUTES", 15),
             explore_slots=_int("EXPLORE_SLOTS", 1),
             explore_min_regular=_int("EXPLORE_MIN_REGULAR", 4),
-            examples_in_prompt=_int("EXAMPLES_IN_PROMPT", 120),
-            summary_profile=(_env("SUMMARY_PROFILE", "full") or "full").lower(),
+            examples_in_prompt=_int("EXAMPLES_IN_PROMPT", 0 if strict else 120),
+            summary_profile=(_env("SUMMARY_PROFILE", "lean" if strict else "full") or "full").lower(),
             top_n=_int("TOP_N", 10),
             min_score=_int("MIN_SCORE", 6),
             min_items=_int("MIN_ITEMS", 5),
@@ -218,6 +223,8 @@ class Settings:
                     errors.append(f"{key} fehlt")
         else:
             errors.append("SOURCE muss 'miniflux' oder 'greader' sein")
+        if self.privacy not in ("standard", "strict"):
+            errors.append("PRIVACY muss 'standard' oder 'strict' sein")
         if self.summary_profile not in ("full", "lean"):
             errors.append("SUMMARY_PROFILE muss 'full' oder 'lean' sein")
         if self.select_from not in ("unread", "new"):

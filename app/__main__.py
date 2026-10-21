@@ -102,7 +102,7 @@ def _make_handler(s: Settings):
                 if not target:
                     return self._send(404, b"unbekannter Artikel", "text/plain; charset=utf-8")
                 if self.command == "GET" and feedback.is_human(self.headers.get("User-Agent")):
-                    feedback.record_click(s.data_dir, entry_id)
+                    feedback.record_click(s.data_dir, entry_id, day_only=s.privacy == "strict")
                 return self._redirect(target)
             return self._send(404, b"not found", "text/plain")
 
