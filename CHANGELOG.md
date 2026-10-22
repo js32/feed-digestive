@@ -20,6 +20,7 @@
 - **`OPEN_PIXEL=log`** (experimental): measures whether the reader loads an invisible image only when
   an entry is opened; `opens-report` evaluates it. Does not count for learning.
 - nginx example: new locations for `/v/` and `/p/`.
+- Status page on phones: no more sideways scrolling; "similar to …" on its own shortened line.
 
 ## v1.0 – 2026-10-22
 
