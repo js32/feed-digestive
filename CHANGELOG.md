@@ -3,8 +3,8 @@
 ## Unreleased
 
 - **👍 mehr davon / 👎 weniger davon** under each article (`VOTE_LINKS`, on by default). 👍 counts
-  like a star, 👎 is a strong negative example; the latest vote wins.
-- **Weighted signals:** learning weights each example by its strongest signal – 👍/★ 1.5, click 1.0,
+  more than a star (2.0 vs 1.5), 👎 is an equally strong negative example; the latest vote wins.
+- **Weighted signals:** learning weights each example by its strongest signal – 👍 2.0, ★ 1.5, click 1.0,
   read 0.3. The status page shows all of them per article.
 - **`READ_SIGNAL`** (off by default): read status of digest entries from Miniflux (`FEED_MODE=items`),
   bulk "mark all as read" ignored. Off because many people mark entries as read to tidy up.

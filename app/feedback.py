@@ -24,9 +24,9 @@ ID_RE = re.compile(r"^[A-Za-z0-9_-]{1,64}$")
 HISTORY_DAYS = 180
 
 # Wie stark ein Signal für Interesse spricht (Gewicht beim Lernen). Zählt pro Artikel das stärkste.
-SIGNAL_WEIGHTS = {"read": 0.3, "click": 1.0, "star": 1.5, "up": 1.5}
+SIGNAL_WEIGHTS = {"read": 0.3, "click": 1.0, "star": 1.5, "up": 2.0}
 # 👎 "weniger davon": deutliches Negativbeispiel, schlägt alle anderen Signale
-DOWN_WEIGHT = 1.5
+DOWN_WEIGHT = 2.0
 # "Alle als gelesen markieren": so viele Einträge innerhalb weniger Sekunden zählen nicht als angelesen
 BULK_MIN, BULK_SECONDS = 4, 15
 

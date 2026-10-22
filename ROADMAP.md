@@ -59,7 +59,7 @@ The goal is to send as little about *you* as possible.
 
 ## Learning
 
-- [x] 👍/👎 links per article; weighted signals (👍/★ 1.5, click 1.0, read 0.3, 👎 negative)
+- [x] 👍/👎 links per article; weighted signals (👍 2.0, ★ 1.5, click 1.0, read 0.3, 👎 −2.0)
 - [x] Optional "read in the reader" signal (`READ_SIGNAL`, Miniflux)
 - [ ] Decide on `OPEN_PIXEL` after a week of measurements: use it as a signal or drop it
 - [ ] "Read" signal for Google Reader API sources

@@ -236,11 +236,11 @@ signals count, each article by its strongest one:
 
 | Signal | How it's detected | Weight |
 |---|---|---|
-| 👍 **"mehr davon"** | tap on the link under each article (`VOTE_LINKS`) | 1.5 |
+| 👍 **"mehr davon"** | tap on the link under each article (`VOTE_LINKS`) | 2.0 |
 | ★ **Starred** | star in your reader, on the digest entry or the original article | 1.5 |
 | ✓ **Clicked "→ Zum Artikel"** | redirect through your own server | 1.0 |
 | 👁 **Read in your reader** | off by default (`READ_SIGNAL`), see below | 0.3 |
-| 👎 **"weniger davon"** | tap on the link under each article – a clear *negative* example | −1.5 |
+| 👎 **"weniger davon"** | tap on the link under each article – a clear *negative* example | −2.0 |
 
 - **Clicks:** links in the digest point to `your.domain/<token>/r/<id>`, which records the click
   and redirects to the article. Crawlers, link previews and scripts don't count. The target

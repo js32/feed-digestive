@@ -6,8 +6,8 @@ dass du einen Artikel anklickst oder markierst.
 
 Labels:
   1    Interesse gezeigt – gewichtet nach dem stärksten Signal: im Reader angelesen 0,3,
-       „Zum Artikel“ geklickt 1,0, Stern oder 👍 1,5 (feedback.SIGNAL_WEIGHTS)
-  0    👎 „weniger davon“ – Gewicht 1,5, schlägt alle anderen Signale
+       „Zum Artikel“ geklickt 1,0, Stern 1,5, 👍 2,0 (feedback.SIGNAL_WEIGHTS)
+  0    👎 „weniger davon“ – Gewicht 2,0, schlägt alle anderen Signale
   0    im Digest gezeigt, aber nach FEEDBACK_DAYS weder geklickt noch markiert
   0    nie gezeigt und nie markiert – nur mit kleinem Gewicht (unbekannt ≠ uninteressant)
 
