@@ -1,0 +1,41 @@
+# Changelog
+
+## v1.0 – 2026-10-22
+
+First stable release. Runs daily in production on a small VPS (2 vCPU, Miniflux, Mistral).
+
+**Sources**
+- Miniflux (native API) and every reader with the Google Reader API (FreshRSS, Inoreader,
+  The Old Reader, BazQux, Tiny Tiny RSS / Nextcloud News via plugin)
+- All unread articles as candidates (`SELECT_FROM=unread`) or only new ones; scores are cached,
+  nothing is shown twice
+
+**Selection**
+- Local pre-filter with [Laya](https://laya.convaiinnovations.com/): per-article language routing
+  (`LAYA_MODEL=auto`), editable question catalogue, news/PR/clickbait penalties, checkpoints and
+  progress for long runs
+- LLM scoring and excerpts with Anthropic, OpenAI, Mistral, OpenRouter, Gemini, Ollama or any
+  OpenAI-compatible endpoint; separate providers for scoring and writing
+- `ARTICLES=8-10`: minimum and maximum per digest, topped-up articles marked
+- Local embeddings (optional): the same story from several sources only once, "similar to your
+  starred article …"
+- Topic sections, readable digest titles, "Warum lesen" first, 🎲 random pick against the filter bubble
+
+**Learning**
+- Clicks (via redirect on your own server, bots filtered) and stars from your reader train a
+  small local model on top of Laya's answers; stars are picked up every 15 minutes
+- `laya-report` shows which Laya questions help and where Laya and the LLM disagree
+
+**Privacy**
+- `PRIVACY=strict`, `SUMMARY_PROFILE=lean`, private `local-only` section in `interests.md`
+- Local audit log of every LLM call (`LLM_AUDIT`) with `privacy-report` and a status-page card
+- `REASONING_EFFORT=none` against paid thinking tokens
+
+**Operation**
+- One hardened Docker container (read-only, no capabilities, resource limits), state in plain files
+- Status page with run progress, last digest, score distribution, service checks and live log
+- Rate limits learned from HTTP 429 / `Retry-After`; `LAYA_THREADS` from the container limit
+- Short `.env.example` with every option explained
+
+**Not in v1.0:** Laya via ONNX Runtime lives on branch `onnx` until it has been tested on a real
+checkpoint – see [ROADMAP.md](ROADMAP.md).

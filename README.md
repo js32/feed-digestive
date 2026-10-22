@@ -75,7 +75,12 @@ FEED_TOKEN=<random hex>
 DIGEST_TIME=06:30
 TZ=Europe/Berlin
 OUTPUT_LANGUAGE=English
+ARTICLES=8-10                        # at least 8, at most 10 articles per digest
+# PRIVACY=strict                     # send as little about you as possible, see Privacy
 ```
+
+Every other setting has a sensible default; `.env.example` lists them all with a short
+explanation at the top and keeps the block to fill in short.
 
 Then build, check and do a test run:
 
@@ -213,8 +218,10 @@ that arrived since the last run.
 
 ### How many articles
 
-Everything scoring at least `MIN_SCORE` goes in, up to `TOP_N`. If that's fewer than `MIN_ITEMS`,
-the digest is topped up with the next best articles, but never below `FLOOR_SCORE`. Topped-up
+Usually one setting is enough: `ARTICLES=8-10` means at least 8 and at most 10 articles per
+digest, the random pick included. Under the hood, everything scoring at least `MIN_SCORE` (6/10)
+goes in, up to the maximum (`TOP_N`). If that's fewer than the minimum (`MIN_ITEMS`), the digest
+is topped up with the next best articles, but never below `FLOOR_SCORE`. Topped-up
 articles are marked with ↓ and "aufgefüllt"; `MIN_ITEMS=0` never tops up. `FEED_MODE=items` turns every
 article into its own feed entry instead of one daily digest.
 
@@ -412,7 +419,7 @@ don't touch.
 **Status page:** `https://your.domain/<FEED_TOKEN>/status`, like the feed only reachable via the
 secret path. It shows:
 
-- whether a run is in progress, in which stage and why it waits (e.g. `LLM_MIN_INTERVAL`); the
+- whether a run is in progress, in which stage and why it waits (e.g. a provider's rate limit); the
   browser tab title and icon show the state too
 - the numbers of the current or last run: fetched, new, scored, picked
 - the latest digest grouped by topic, with scores and which articles you clicked or starred, plus
@@ -451,6 +458,13 @@ memory/CPU limits (`DIGEST_MEM_LIMIT`, `DIGEST_CPUS`).
 - **Goes to your LLM provider:** titles, snippets and text of the articles being scored or
   summarised, plus your interest profile. With Laya in front, that's ~40 instead of all
   articles. Use Ollama if nothing should leave your server.
+- **`PRIVACY=strict`** cuts that down to the minimum: only `interests.md` goes along – no reading
+  history examples, no starred titles, lean excerpt prompts – and clicks are stored by date only.
+- **Private notes:** anything between `<!-- local-only -->` and `<!-- /local-only -->` in
+  `interests.md` is never sent to a cloud provider.
+- **You can check it:** every LLM call is logged locally (`LLM_AUDIT`); `privacy-report` and the
+  status page show what went where. `REASONING_EFFORT=none` also avoids paying for "thinking"
+  tokens on hybrid models.
 - The feed URL contains a secret token. Anyone with the URL can read your digest, so treat it
   like a password.
 

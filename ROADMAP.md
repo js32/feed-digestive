@@ -1,6 +1,7 @@
 # Roadmap
 
-Ideas and planned work for feed-digestive. Checked items are done.
+Ideas and planned work for feed-digestive. Checked items are done; everything checked is part of
+v1.0 unless noted. See [CHANGELOG.md](CHANGELOG.md) for releases.
 
 ## Privacy
 
@@ -32,6 +33,11 @@ The goal is to send as little about *you* as possible.
 - [ ] Configurable excerpt length (`EXCERPT_SENTENCES`)
 - [x] Mark the 🎲 random pick and topped-up articles (below `MIN_SCORE`) visibly as such
 
+## Settings
+
+- [x] `ARTICLES=8-10` instead of `TOP_N` + `MIN_ITEMS`; short `.env.example` with all options explained on top
+- [x] Rate limits learned from HTTP 429 / `Retry-After` (no `LLM_MIN_INTERVAL` needed), `LAYA_THREADS` from the container limit
+
 ## Selection quality
 
 - [x] Same story from several sources only once (embedding similarity, `DEDUP_SIMILARITY`)
@@ -44,9 +50,12 @@ The goal is to send as little about *you* as possible.
 
 ## Performance
 
-- [ ] Laya via ONNX Runtime with int8 quantisation for much faster CPU inference and lower RAM
+- [ ] **Laya via ONNX Runtime** (`LAYA_BACKEND=onnx`, same fp32 weights, identical answers, ~1.45× faster on CPU
+      per Laya's authors) – implemented on branch `onnx`, merged once tested on a real checkpoint
+- [ ] int4 weight-only variant as an option, checked against your own data with `laya-export --check`
+      (int8 dropped: Laya's authors measured a real accuracy loss)
 - [ ] Smaller default question catalogue (fewer, merged topics)
-- [ ] Load Laya in bfloat16 as a memory-saving option
+- [ ] Load Laya in bfloat16 as a memory-saving option (only pays off on CPUs with BF16 support)
 
 ## Learning
 
