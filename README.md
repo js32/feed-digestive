@@ -95,7 +95,7 @@ The first `check` downloads the Laya model (~1 GB) into `data/hf`.
 
 **Reverse proxy:** the container only listens on `127.0.0.1:8087`. Copy
 `deploy/nginx.conf.example`, replace `digest.example.org` with your domain, get a certificate
-(e.g. `certbot --nginx -d your.domain`) and reload nginx. Only the feed and the click redirects
+(e.g. `certbot --nginx -d your.domain`) and reload nginx. Only the feed, the click redirects, the 👍/👎 links
 are passed through, plus the status page (see below); everything else returns 404.
 
 **Subscribe** to `https://your.domain/<FEED_TOKEN>/feed.xml` in your reader. The digest feed
@@ -236,18 +236,26 @@ signals count, each article by its strongest one:
 
 | Signal | How it's detected | Weight |
 |---|---|---|
-| 👁 **Read in your reader** | the reader marks the digest entry as read (needs `FEED_MODE=items`, Miniflux) | 0.3 |
-| ✓ **Clicked "→ Zum Artikel"** | redirect through your own server | 1.0 |
+| 👍 **"mehr davon"** | tap on the link under each article (`VOTE_LINKS`) | 1.5 |
 | ★ **Starred** | star in your reader, on the digest entry or the original article | 1.5 |
+| ✓ **Clicked "→ Zum Artikel"** | redirect through your own server | 1.0 |
+| 👁 **Read in your reader** | off by default (`READ_SIGNAL`), see below | 0.3 |
+| 👎 **"weniger davon"** | tap on the link under each article – a clear *negative* example | −1.5 |
 
 - **Clicks:** links in the digest point to `your.domain/<token>/r/<id>`, which records the click
   and redirects to the article. Crawlers, link previews and scripts don't count. The target
   site sees neither your secret path (`Referrer-Policy: no-referrer`) nor that you came from the digest.
-- **Read:** with `FEED_MODE=items` every article is its own entry, so the reader's read status
-  tells which ones you opened. Fetched from Miniflux every `STAR_POLL_MINUTES` and on each run.
-  "Mark all as read" doesn't count: 4 or more entries marked within 15 seconds are ignored. If your
-  reader marks entries as read while scrolling, this signal gets noisy – turn that off in the reader.
-  Not yet available with the Google Reader API.
+- **👍/👎:** two small links next to "→ Zum Artikel". A tap opens a short "Notiert" page on your
+  server (with a link to change your mind); the latest vote counts. 👎 is the only way to tell the
+  app what you *don't* want – otherwise it can only guess from missing clicks.
+- **Read (`READ_SIGNAL=true`, off by default):** with `FEED_MODE=items` the reader's read status of
+  each digest entry is fetched from Miniflux. Only useful if you never mark entries as read to tidy
+  up – a reader can't tell the app whether you actually read something. "Mark all as read" (4 or
+  more within 15 seconds) is ignored. Not yet available with the Google Reader API.
+- **Measuring "opened" (`OPEN_PIXEL=log`, experimental):** adds an invisible 1×1 image to each
+  article and only *logs* when it's loaded – it does not count for learning. After a week,
+  `python -m app opens-report` shows whether your reader loads it only when you open an entry, or
+  for everything in advance (then it's useless as a signal).
 - **Stars:** stars in your reader, on original articles or on digest entries, are collected on
   every run and every `STAR_POLL_MINUTES`.
 - **Learning:** a small logistic regression on Laya's answers predicts what you'll be interested
@@ -260,6 +268,7 @@ signals count, each article by its strongest one:
 ```bash
 docker compose exec digest python -m app learn    # show what it has learned
 docker compose exec digest python -m app laya-report   # which Laya questions actually help
+docker compose exec digest python -m app opens-report   # result of the OPEN_PIXEL measurement
 ```
 
 Data is kept in `data/history.jsonl` and `data/feedback.jsonl` for 180 days. Set
@@ -382,12 +391,15 @@ At most 3 articles per source feed are taken, unless that's needed to reach `MIN
 | `LLM_AUDIT` | `on` | Log every LLM call to `data/llm_audit.jsonl`: provider, model, purpose, size, article titles and which parts of your profile went along. `full` also stores the complete prompts, `off` disables it. Read it with `privacy-report` or on the status page. |
 | `LLM_AUDIT_DAYS` | `30` | Delete audit entries older than this. |
 | `STAR_POLL_MINUTES` | `15` | Pick up new stars from the feed reader this often, in addition to each run, so they show up on the status page soon. `0` = only during runs. |
+| `VOTE_LINKS` | `true` | 👍 mehr davon / 👎 weniger davon under each article. Both are learning signals; 👎 is a strong negative example. |
+| `READ_SIGNAL` | `false` | Count "read in the reader" (Miniflux, `FEED_MODE=items`) as a weak signal (0.3). Leave off if you mark entries as read to tidy up. |
+| `OPEN_PIXEL` | `off` | `log` adds an invisible image per article and logs when it's loaded – a measurement only, see `opens-report`. Needs the `/p/` location in nginx. |
 
 ### Output feed
 
 | Setting | Default | Description |
 |---|---|---|
-| `FEED_MODE` | `daily` | `daily`: one feed entry per digest with all articles. `items`: one feed entry per article – also enables the "read in your reader" signal. Takes effect on the next start. |
+| `FEED_MODE` | `daily` | `daily`: one feed entry per digest with all articles. `items`: one feed entry per article – needed for `READ_SIGNAL`. Takes effect on the next start. |
 | `FEED_TITLE` | `Mein Tages-Digest` | Title of the feed in your reader. |
 | `KEEP_DAYS` | `30` | How long digests stay in the feed. |
 | `PUBLIC_URL` | `http://localhost:8080` | Public base URL as your reader sees it, e.g. `https://digest.example.org`. Used for feed and click links. |
@@ -426,6 +438,7 @@ don't touch.
 | `docker compose exec digest python -m app run` | create a digest now |
 | `docker compose exec digest python -m app learn` | show learned weights |
 | `docker compose exec digest python -m app privacy-report [days]` | what was sent to LLM providers in the last days (default 30): calls, characters, articles, and which parts of your profile |
+| `docker compose exec digest python -m app opens-report [days]` | evaluate the `OPEN_PIXEL` measurement: does your reader load the image only when you open an entry? |
 | `docker compose exec digest python -m app laya-report` | evaluate each Laya question against LLM scores, clicks and stars (hit rate, correlation, overlaps, disagreements) |
 
 **Status page:** `https://your.domain/<FEED_TOKEN>/status`, like the feed only reachable via the

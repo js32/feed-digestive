@@ -6,7 +6,8 @@ dass du einen Artikel anklickst oder markierst.
 
 Labels:
   1    Interesse gezeigt – gewichtet nach dem stärksten Signal: im Reader angelesen 0,3,
-       „Zum Artikel“ geklickt 1,0, Stern 1,5 (feedback.SIGNAL_WEIGHTS)
+       „Zum Artikel“ geklickt 1,0, Stern oder 👍 1,5 (feedback.SIGNAL_WEIGHTS)
+  0    👎 „weniger davon“ – Gewicht 1,5, schlägt alle anderen Signale
   0    im Digest gezeigt, aber nach FEEDBACK_DAYS weder geklickt noch markiert
   0    nie gezeigt und nie markiert – nur mit kleinem Gewicht (unbekannt ≠ uninteressant)
 
@@ -21,7 +22,7 @@ import math
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
-from .feedback import read_jsonl, signals
+from .feedback import DOWN_WEIGHT, read_jsonl, signals, votes
 
 log = logging.getLogger(__name__)
 
@@ -34,7 +35,8 @@ LR = 0.5
 
 def build_dataset(data_dir: Path, feedback_days: int) -> tuple[list[dict], list[int], list[float], dict]:
     history = [r for r in read_jsonl(data_dir / "history.jsonl") if r.get("features")]
-    sig = signals(read_jsonl(data_dir / "feedback.jsonl"))
+    fb = read_jsonl(data_dir / "feedback.jsonl")
+    sig, vote = signals(fb), votes(fb)
     settle = (datetime.now(timezone.utc) - timedelta(days=feedback_days)).isoformat()
 
     # pro Artikel nur der jüngste Protokolleintrag
@@ -42,9 +44,12 @@ def build_dataset(data_dir: Path, feedback_days: int) -> tuple[list[dict], list[
     for r in history:
         latest[str(r["entry_id"])] = r
     X, y, w = [], [], []
-    stats = {"pos": 0, "pos_weight": 0.0, "read": 0, "click": 0, "star": 0, "neg_shown": 0, "neg_unshown": 0}
+    stats = {"pos": 0, "pos_weight": 0.0, "read": 0, "click": 0, "star": 0, "up": 0, "down": 0,
+             "neg_shown": 0, "neg_unshown": 0}
     for eid, r in latest.items():
-        if eid in sig:
+        if vote.get(eid) == "down":
+            X.append(r["features"]); y.append(0); w.append(DOWN_WEIGHT); stats["down"] += 1
+        elif eid in sig:
             kinds = sig[eid]
             weight = max(kinds.values())
             X.append(r["features"]); y.append(1); w.append(weight)
@@ -105,7 +110,7 @@ class Learner:
 
 def retrain(data_dir: Path, feedback_days: int) -> Learner:
     X, y, w, stats = build_dataset(data_dir, feedback_days)
-    neg = stats["neg_shown"] + stats["neg_unshown"]
+    neg = stats["neg_shown"] + stats["neg_unshown"] + stats["down"]
     path = data_dir / "learned_weights.json"
     if stats["pos_weight"] < MIN_POS or neg < MIN_NEG:
         log.info("Lernen: noch zu wenig Rückmeldung (%.1f positiv gewichtet, %d negativ; nötig %d/%d) – nur Formel",
@@ -117,9 +122,9 @@ def retrain(data_dir: Path, feedback_days: int) -> Learner:
     tmp.write_text(json.dumps(model, ensure_ascii=False, indent=1), encoding="utf-8")
     tmp.replace(path)
     learner = Learner(model, stats["pos_weight"])
-    log.info("Lernen: Modell aus %d positiven (%d angelesen, %d geklickt, %d Stern) / %d negativen Beispielen, "
-             "Anteil am Wert %.0f %%", stats["pos"], stats["read"], stats["click"], stats["star"], neg,
-             learner.alpha * 100)
+    log.info("Lernen: Modell aus %d positiven (%d 👍, %d Stern, %d geklickt, %d angelesen) / %d negativen "
+             "(%d 👎) Beispielen, Anteil am Wert %.0f %%", stats["pos"], stats["up"], stats["star"], stats["click"],
+             stats["read"], neg, stats["down"], learner.alpha * 100)
     return learner
 
 
@@ -127,8 +132,9 @@ def describe(data_dir: Path, feedback_days: int, labels: dict[str, str]) -> str:
     """Lesbare Übersicht für `python -m app learn`."""
     learner = retrain(data_dir, feedback_days)
     X, y, w, stats = build_dataset(data_dir, feedback_days)
-    lines = [f"Rückmeldungen: {stats['pos']} positiv ({stats['star']} Stern, {stats['click']} geklickt, "
-             f"{stats['read']} nur angelesen; gewichtet {stats['pos_weight']:.1f}), "
+    lines = [f"Rückmeldungen: {stats['pos']} positiv ({stats['up']} 👍, {stats['star']} Stern, "
+             f"{stats['click']} geklickt, {stats['read']} nur angelesen; gewichtet {stats['pos_weight']:.1f}), "
+             f"{stats['down']} 👎, "
              f"{stats['neg_shown']} gezeigt ohne Klick, {stats['neg_unshown']} nie gezeigt"]
     if not learner.active:
         lines.append(f"Noch kein Modell – nötig sind mindestens {MIN_POS} positive und {MIN_NEG} negative Beispiele.")

@@ -288,10 +288,13 @@ def _scores(rows: list[dict]) -> dict:
 
 
 def _reactions(rows: list[dict]) -> dict:
-    out: dict[str, set] = {"read": set(), "click": set(), "star": set()}
+    from .feedback import votes
+    out: dict[str, set] = {"read": set(), "click": set(), "star": set(), "up": set(), "down": set()}
     for r in rows:
-        if r.get("kind") in out:
+        if r.get("kind") in ("read", "click", "star"):
             out[r["kind"]].add(str(r.get("entry_id")))
+    for eid, kind in votes(rows).items():  # letzte Stimme zählt
+        out[kind].add(eid)
     return out
 
 
@@ -336,7 +339,9 @@ def snapshot(s: Settings) -> dict:
                                                    "why", "topic", "explore", "filler", "similar_to")},
                        "read": str(it.get("entry_id")) in reactions["read"],
                        "clicked": str(it.get("entry_id")) in reactions["click"],
-                       "starred": str(it.get("entry_id")) in reactions["star"]}
+                       "starred": str(it.get("entry_id")) in reactions["star"],
+                       "up": str(it.get("entry_id")) in reactions["up"],
+                       "down": str(it.get("entry_id")) in reactions["down"]}
                       for it in latest.get("items", [])],
         },
     }

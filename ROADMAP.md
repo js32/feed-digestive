@@ -59,7 +59,9 @@ The goal is to send as little about *you* as possible.
 
 ## Learning
 
-- [x] Three weighted signals: read in the reader (Miniflux, `FEED_MODE=items`), clicked, starred
+- [x] 👍/👎 links per article; weighted signals (👍/★ 1.5, click 1.0, read 0.3, 👎 negative)
+- [x] Optional "read in the reader" signal (`READ_SIGNAL`, Miniflux)
+- [ ] Decide on `OPEN_PIXEL` after a week of measurements: use it as a signal or drop it
 - [ ] "Read" signal for Google Reader API sources
 
 - [ ] Fine-tune Laya on your own clicks and stars once enough feedback has accumulated

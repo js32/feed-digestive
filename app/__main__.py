@@ -6,6 +6,7 @@
   python -m app check     Verbindung zu Feedreader und LLMs testen
   python -m app learn     zeigen, was aus Klicks und Sternen gelernt wurde
   python -m app laya-report  auswerten, welche Laya-Fragen etwas taugen
+  python -m app opens-report [Tage]  Pixel-Messung auswerten (OPEN_PIXEL=log)
   python -m app privacy-report [Tage]  was in den letzten Tagen an LLM-Anbieter ging
 """
 from __future__ import annotations
@@ -74,11 +75,19 @@ def _next_run(s: Settings) -> datetime:
     return nxt
 
 
+# 1×1 transparentes GIF
+PIXEL = (b"GIF89a\x01\x00\x01\x00\x80\x00\x00\x00\x00\x00\x00\x00\x00!\xf9\x04\x01\x00\x00\x00\x00"
+         b",\x00\x00\x00\x00\x01\x00\x01\x00\x00\x02\x02D\x01\x00;")
+
+
 def _make_handler(s: Settings):
     feed_file = s.data_dir / "feed.xml"
     prefix = f"/{s.feed_token}" if s.feed_token else ""
     redirect_re = re.compile(rf"^{re.escape(prefix)}/r/([A-Za-z0-9_-]{{1,64}})$")
     status_path = f"{prefix}/status"
+    vote_re = re.compile(rf"^{re.escape(prefix)}/v/([A-Za-z0-9_-]{{1,64}})/(up|down)$")
+    pixel_re = re.compile(rf"^{re.escape(prefix)}/p/([A-Za-z0-9_-]{{1,64}})\.gif$")
+    last_feed_fetch = [None]  # Zeitpunkt des letzten Feed-Abrufs, für die Pixel-Messung
 
     class Handler(BaseHTTPRequestHandler):
         server_version = "feed-digestive"
@@ -88,6 +97,7 @@ def _make_handler(s: Settings):
             if path == "/healthz":
                 return self._send(200, b"ok", "text/plain")
             if path == s.feed_path and feed_file.exists():
+                last_feed_fetch[0] = time.monotonic()
                 return self._send(200, feed_file.read_bytes(), "application/atom+xml; charset=utf-8")
             # Status-Seite liegt wie der Feed hinter dem geheimen Pfad
             if path in (status_path, status_path + "/"):
@@ -99,6 +109,15 @@ def _make_handler(s: Settings):
             if path == status_path + "/logs":
                 q = dict(re.findall(r"(?:^|&)(after|gen)=(\d+)", query))
                 return self._json(status.read_log(s.data_dir, int(q.get("after", 0)), int(q.get("gen", 0))))
+            m = vote_re.match(path)
+            if m:
+                return self._vote(*m.groups())
+            m = pixel_re.match(path)
+            if m:
+                if self.command == "GET" and s.open_pixel == "log" and feedback.lookup_url(s.data_dir, m.group(1)):
+                    since = time.monotonic() - last_feed_fetch[0] if last_feed_fetch[0] else None
+                    feedback.record_open(s.data_dir, m.group(1), self.headers.get("User-Agent"), since)
+                return self._send(200, PIXEL, "image/gif", cache=False)
             m = redirect_re.match(path)
             if m:
                 entry_id = m.group(1)
@@ -111,6 +130,25 @@ def _make_handler(s: Settings):
             return self._send(404, b"not found", "text/plain")
 
         do_HEAD = do_GET
+
+        def _vote(self, entry_id, kind):
+            from html import escape
+            target = feedback.lookup_url(s.data_dir, entry_id)
+            if not target:
+                return self._send(404, b"unbekannter Artikel", "text/plain; charset=utf-8")
+            title = feedback.lookup_title(s.data_dir, entry_id) or target
+            if self.command == "GET" and feedback.is_human(self.headers.get("User-Agent")):
+                feedback.record_vote(s.data_dir, entry_id, kind, day_only=s.privacy == "strict")
+            other = "down" if kind == "up" else "up"
+            text = "👍 Notiert: mehr davon." if kind == "up" else "👎 Notiert: weniger davon."
+            undo = "👎 doch lieber weniger" if kind == "up" else "👍 doch lieber mehr"
+            page = (f'<!doctype html><meta charset="utf-8"><meta name="viewport" content="width=device-width">'
+                    f'<title>Danke</title><body style="font:17px system-ui;max-width:32em;margin:3em auto;padding:0 1em">'
+                    f'<p style="font-size:1.4em">{text}</p><p>„{escape(title)}“</p>'
+                    f'<p><a href="{escape(feedback.vote_url(s.feed_base, entry_id, other), quote=True)}">{undo}</a>'
+                    f' &nbsp;·&nbsp; <a href="{escape(feedback.tracked_url(s.feed_base, entry_id) if s.track_clicks else target, quote=True)}">→ Zum Artikel</a></p>'
+                    f'<p style="color:#888">Du kannst dieses Fenster schließen.</p>')
+            return self._send(200, page.encode(), "text/html; charset=utf-8", cache=False)
 
         def _redirect(self, target):
             self.send_response(302)
@@ -236,6 +274,9 @@ def main() -> None:
             labels["depth"] = "Tiefe"
             labels.update({f"penalty_{k}": "Malus " + v.get("label", k) for k, v in spec.get("penalties", {}).items()})
         print(describe(s.data_dir, s.feedback_days, labels))
+    elif cmd == "opens-report":
+        days = int(sys.argv[2]) if len(sys.argv) > 2 and sys.argv[2].isdigit() else 14
+        print(feedback.opens_report(s.data_dir, days))
     elif cmd == "privacy-report":
         days = int(sys.argv[2]) if len(sys.argv) > 2 and sys.argv[2].isdigit() else 30
         print(audit.report(s.data_dir, days))

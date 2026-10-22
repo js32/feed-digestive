@@ -24,7 +24,9 @@ ID_RE = re.compile(r"^[A-Za-z0-9_-]{1,64}$")
 HISTORY_DAYS = 180
 
 # Wie stark ein Signal für Interesse spricht (Gewicht beim Lernen). Zählt pro Artikel das stärkste.
-SIGNAL_WEIGHTS = {"read": 0.3, "click": 1.0, "star": 1.5}
+SIGNAL_WEIGHTS = {"read": 0.3, "click": 1.0, "star": 1.5, "up": 1.5}
+# 👎 "weniger davon": deutliches Negativbeispiel, schlägt alle anderen Signale
+DOWN_WEIGHT = 1.5
 # "Alle als gelesen markieren": so viele Einträge innerhalb weniger Sekunden zählen nicht als angelesen
 BULK_MIN, BULK_SECONDS = 4, 15
 
@@ -87,7 +89,7 @@ def load_cache(data_dir: Path) -> dict[str, dict]:
 def prune(data_dir: Path) -> None:
     """Alte Protokollzeilen entfernen, damit die Dateien nicht endlos wachsen."""
     cutoff = (datetime.now(timezone.utc) - timedelta(days=HISTORY_DAYS)).isoformat()
-    for name in ("history.jsonl", "feedback.jsonl"):
+    for name in ("history.jsonl", "feedback.jsonl", "opens.jsonl"):
         path = data_dir / name
         rows = read_jsonl(path)
         kept = [r for r in rows if r.get("ts", "") >= cutoff]
@@ -105,6 +107,14 @@ def tracked_url(feed_base: str, entry_id) -> str:
     return f"{feed_base}/r/{entry_id}"
 
 
+def vote_url(feed_base: str, entry_id, kind: str) -> str:
+    return f"{feed_base}/v/{entry_id}/{kind}"
+
+
+def pixel_url(feed_base: str, entry_id) -> str:
+    return f"{feed_base}/p/{entry_id}.gif"
+
+
 def is_human(user_agent: str | None) -> bool:
     return bool(user_agent) and not BOT_RE.search(user_agent)
 
@@ -115,6 +125,18 @@ def record_click(data_dir: Path, entry_id: str, day_only: bool = False) -> None:
     if day_only:
         now = now.replace(hour=0, minute=0, second=0, microsecond=0)
     _append(data_dir / "feedback.jsonl", [{"ts": now.isoformat(), "entry_id": entry_id, "kind": "click"}])
+
+
+def lookup_title(data_dir: Path, entry_id: str) -> str | None:
+    try:
+        digests = json.loads((data_dir / "digests.json").read_text(encoding="utf-8"))
+    except (FileNotFoundError, json.JSONDecodeError):
+        return None
+    for d in digests:
+        for it in d.get("items", []):
+            if str(it.get("entry_id")) == entry_id:
+                return it.get("digest_title") or it.get("title")
+    return None
 
 
 def lookup_url(data_dir: Path, entry_id: str) -> str | None:
@@ -163,14 +185,41 @@ def collect_stars(data_dir: Path, starred_entries: list[dict], quiet: bool = Fal
 # ----------------------------------------------------------------------
 # Im Reader angelesen (Digest-Einträge, die der Reader als gelesen meldet)
 # ----------------------------------------------------------------------
+def votes(rows: list[dict]) -> dict[str, str]:
+    """entry_id -> "up" | "down", die jeweils letzte Stimme zählt (umentscheiden geht)."""
+    out: dict[str, str] = {}
+    for r in rows:
+        if r.get("kind") in ("up", "down"):
+            out[str(r.get("entry_id"))] = r["kind"]
+    return out
+
+
 def signals(rows: list[dict]) -> dict[str, dict[str, float]]:
-    """entry_id -> {kind: Gewicht} aus feedback.jsonl."""
+    """entry_id -> {kind: Gewicht} der positiven Signale aus feedback.jsonl (ohne 👎-Artikel)."""
+    vote = votes(rows)
     out: dict[str, dict[str, float]] = {}
     for r in rows:
         kind = r.get("kind") or "click"
-        if kind in SIGNAL_WEIGHTS:
-            out.setdefault(str(r.get("entry_id")), {})[kind] = SIGNAL_WEIGHTS[kind]
+        eid = str(r.get("entry_id"))
+        if kind == "up" and vote.get(eid) != "up":
+            continue  # später zurückgenommen
+        if kind in SIGNAL_WEIGHTS and vote.get(eid) != "down":
+            out.setdefault(eid, {})[kind] = SIGNAL_WEIGHTS[kind]
     return out
+
+
+def record_vote(data_dir: Path, entry_id: str, kind: str, day_only: bool = False) -> None:
+    now = datetime.now(timezone.utc)
+    if day_only:
+        now = now.replace(hour=0, minute=0, second=0, microsecond=0)
+    _append(data_dir / "feedback.jsonl", [{"ts": now.isoformat(), "entry_id": entry_id, "kind": kind}])
+
+
+def record_open(data_dir: Path, entry_id: str, user_agent: str | None, since_feed: float | None) -> None:
+    """Messung fürs unsichtbare Bild (OPEN_PIXEL=log) – getrennt von feedback.jsonl, zählt nicht fürs Lernen."""
+    _append(data_dir / "opens.jsonl", [{
+        "ts": datetime.now(timezone.utc).isoformat(), "entry_id": entry_id,
+        "ua": (user_agent or "")[:120], "since_feed": None if since_feed is None else round(since_feed, 1)}])
 
 
 def _bulk(times: list[float]) -> set[int]:
@@ -234,7 +283,7 @@ def collect_reads(data_dir: Path, read_entries: list[dict], day_only: bool = Fal
 
 def collect_reader_reads(s, src, quiet: bool = False) -> int:
     """Angelesen-Signal aus dem Reader holen – nur sinnvoll mit FEED_MODE=items (ein Eintrag je Artikel)."""
-    if s.feed_mode != "items" or not s.learn:
+    if not s.read_signal or s.feed_mode != "items" or not s.learn:
         return 0
     try:
         entries = src.digest_reads(s.feed_path)
@@ -246,3 +295,42 @@ def collect_reader_reads(s, src, quiet: bool = False) -> int:
             log.info("Angelesen: mit dieser Quelle (noch) nicht unterstützt – nur Klicks und Sterne")
         return 0
     return collect_reads(s.data_dir, entries, day_only=s.privacy == "strict", quiet=quiet)
+
+
+def opens_report(data_dir: Path, days: int = 14) -> str:
+    """Auswertung der Pixel-Messung: lädt der Reader das Bild nur beim Öffnen oder alles vorab?"""
+    rows = read_jsonl(data_dir / "opens.jsonl")
+    since = (datetime.now(timezone.utc) - timedelta(days=days)).isoformat()
+    rows = [r for r in rows if r.get("ts", "") >= since]
+    try:
+        digests = json.loads((data_dir / "digests.json").read_text(encoding="utf-8"))
+    except (FileNotFoundError, json.JSONDecodeError):
+        digests = []
+    shown = {str(it.get("entry_id")): (it.get("digest_title") or it.get("title") or "")
+             for d in digests if d.get("generated_at", "") >= since for it in d.get("items", [])}
+    if not rows:
+        return (f"Keine Pixel-Abrufe in den letzten {days} Tagen. OPEN_PIXEL=log gesetzt, Container neu "
+                "gestartet und der Reader hat den Feed seitdem geladen?")
+    first: dict[str, dict] = {}
+    for r in rows:
+        first.setdefault(str(r["entry_id"]), r)
+    times = [datetime.fromisoformat(r["ts"]).timestamp() for r in first.values()]
+    bulk = _bulk(times)
+    quick = [r for r in first.values() if r.get("since_feed") is not None and r["since_feed"] < 120]
+    lines = [f"Pixel-Messung, letzte {days} Tage",
+             f"Gezeigte Artikel: {len(shown)}   mit Pixel-Abruf: {len(first)} "
+             f"({len(first) / max(1, len(shown)):.0%})",
+             f"davon in Gruppen (≥{BULK_MIN} innerhalb {BULK_SECONDS} s – sieht nach Vorladen aus): {len(bulk)}",
+             f"davon bis 2 min nach einem Feed-Abruf: {len(quick)}",
+             "Kennungen: " + ", ".join(sorted({(r.get('ua') or '?')[:40] for r in rows}))[:400], ""]
+    if len(first) >= 0.8 * max(1, len(shown)) and len(bulk) >= 0.5 * len(first):
+        lines.append("→ Der Reader lädt das Bild offenbar für fast alles vorab. Als Signal untauglich.")
+    elif len(first) < 0.8 * max(1, len(shown)) and len(bulk) < 0.3 * max(1, len(first)):
+        lines.append("→ Sieht nach echten Öffnungen aus: nur ein Teil, einzeln über den Tag verteilt.")
+    else:
+        lines.append("→ Noch nicht eindeutig – ein paar Tage weiter messen.")
+    lines.append("\nErste Abrufe (neueste zuerst):")
+    for i, r in sorted(enumerate(first.values()), key=lambda t: t[1]["ts"], reverse=True)[:25]:
+        mark = " [Gruppe]" if i in bulk else ""
+        lines.append(f"  {r['ts'][5:16].replace('T', ' ')}{mark}  {shown.get(str(r['entry_id']), r['entry_id'])[:60]}")
+    return "\n".join(lines)

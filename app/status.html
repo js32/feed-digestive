@@ -727,6 +727,8 @@ function itemRow(it, withWhy) {
   if (it.read && !it.clicked) meta.append(badge("gray", "👁 angelesen"));
   if (it.clicked) meta.append(badge("ok", "✓ angeklickt"));
   if (it.starred) meta.append(badge("warn", "★ Stern"));
+  if (it.up) meta.append(badge("ok", "👍 mehr davon"));
+  if (it.down) meta.append(badge("gray", "👎 weniger davon"));
   if (it.explore) meta.append(badge("run", "Zufallsfund"));
   if (it.filler) meta.append(badge("gray", "Auffüller"));
   if (it.similar_to) meta.append(badge("gray", `ähnlich zu „${it.similar_to}“`));
@@ -745,7 +747,9 @@ function renderDigest() {
     $("digest-h").textContent = `Digest vom ${d.date}`;
     const n = (f) => d.items.filter(f).length;
     const seen = n((it) => it.read && !it.clicked), clicked = n((it) => it.clicked), starred = n((it) => it.starred);
-    const parts = [seen && `${seen} angelesen`, clicked && `${clicked} angeklickt`, starred && `${starred} mit Stern`].filter(Boolean);
+    const up = n((it) => it.up), down = n((it) => it.down);
+    const parts = [seen && `${seen} angelesen`, clicked && `${clicked} angeklickt`, starred && `${starred} mit Stern`,
+                   up && `${up} × 👍`, down && `${down} × 👎`].filter(Boolean);
     $("digest-note").textContent = `${d.items.length} von ${d.considered ?? "?"} Artikeln ausgewählt`
       + (parts.length ? `, davon ${parts.join(", ")}` : "") + `. ${status.digest_count} Digests im Feed.`;
     let group = null, list = null;

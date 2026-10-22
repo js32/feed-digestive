@@ -2,10 +2,15 @@
 
 ## Unreleased
 
-- **Three interest signals:** read in your reader (0.3), clicked "→ Zum Artikel" (1.0), starred (1.5).
-  "Read" comes from Miniflux's read status of digest entries (`FEED_MODE=items`); bulk "mark all as
-  read" is ignored. Learning weights each example by its strongest signal; the status page shows
-  👁 angelesen next to ✓ angeklickt and ★ Stern.
+- **👍 mehr davon / 👎 weniger davon** under each article (`VOTE_LINKS`, on by default). 👍 counts
+  like a star, 👎 is a strong negative example; the latest vote wins.
+- **Weighted signals:** learning weights each example by its strongest signal – 👍/★ 1.5, click 1.0,
+  read 0.3. The status page shows all of them per article.
+- **`READ_SIGNAL`** (off by default): read status of digest entries from Miniflux (`FEED_MODE=items`),
+  bulk "mark all as read" ignored. Off because many people mark entries as read to tidy up.
+- **`OPEN_PIXEL=log`** (experimental): measures whether the reader loads an invisible image only when
+  an entry is opened; `opens-report` evaluates it. Does not count for learning.
+- nginx example: new locations for `/v/` and `/p/`.
 
 ## v1.0 – 2026-10-22
 

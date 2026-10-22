@@ -56,7 +56,27 @@ def _item_html(it: dict, with_header: bool = True, s: Settings | None = None) ->
     excerpt = f'<p>{escape(it.get("excerpt") or "")}</p>' if it.get("excerpt") else ""
     return (f'{head}{why}{excerpt}'
             f'<p><small>{meta}{orig_html}</small></p>'
-            f'<p><a href="{url}">→ Zum Artikel</a></p>')
+            f'<p><a href="{url}">→ Zum Artikel</a>{_votes(it, s)}</p>{_pixel(it, s)}')
+
+
+def _votes(it: dict, s: Settings | None) -> str:
+    """👍/👎 hinter dem Link – eindeutiges Signal, auch negativ."""
+    if s is None or not s.vote_links or not it.get("entry_id"):
+        return ""
+    from .feedback import vote_url
+    up = escape(vote_url(s.feed_base, it["entry_id"], "up"), quote=True)
+    down = escape(vote_url(s.feed_base, it["entry_id"], "down"), quote=True)
+    return f' &nbsp;·&nbsp; <a href="{up}">👍 mehr davon</a> &nbsp;·&nbsp; <a href="{down}">👎 weniger davon</a>'
+
+
+def _pixel(it: dict, s: Settings | None) -> str:
+    """Unsichtbares Bild am Ende (OPEN_PIXEL=log) – nur zur Messung, ob der Reader es erst beim Öffnen lädt."""
+    if s is None or s.open_pixel != "log" or not it.get("entry_id"):
+        return ""
+    from .feedback import pixel_url
+    # ohne width/height="1": Miniflux entfernt Bilder mit diesen Maßen als Tracking-Pixel.
+    # Das GIF selbst ist 1×1 px und transparent, also trotzdem unsichtbar.
+    return f'<img src="{escape(pixel_url(s.feed_base, it["entry_id"]), quote=True)}" alt="">'
 
 
 def _sections(items: list[dict]) -> list[tuple[str, list[dict]]]:

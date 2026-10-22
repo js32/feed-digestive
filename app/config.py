@@ -79,6 +79,9 @@ class Settings:
     similar_min: float = 0.55
     # Rückmeldung / Lernen
     track_clicks: bool = True
+    vote_links: bool = True      # 👍/👎 unter jedem Artikel
+    read_signal: bool = False    # Lesestatus im Reader als Signal (nur ohne Wegsortieren sinnvoll)
+    open_pixel: str = "off"      # off | log: unsichtbares Bild nur protokollieren (Messung)
     learn: bool = True
     feedback_days: int = 3
     star_poll_minutes: int = 15
@@ -164,6 +167,9 @@ class Settings:
             group_topics=_bool("GROUP_TOPICS", True),
             similar_min=float(_env("SIMILAR_MIN", "0.55") or 0.55),
             track_clicks=_bool("TRACK_CLICKS", True),
+            vote_links=_bool("VOTE_LINKS", True),
+            read_signal=_bool("READ_SIGNAL", False),
+            open_pixel=(_env("OPEN_PIXEL", "off") or "off").lower(),
             learn=_bool("LEARN", True),
             feedback_days=_int("FEEDBACK_DAYS", 3),
             star_poll_minutes=_int("STAR_POLL_MINUTES", 15),

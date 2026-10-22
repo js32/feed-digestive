@@ -27,8 +27,8 @@ server {
         proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
         proxy_set_header X-Forwarded-Proto $scheme;
     }
-    # Klick-Zähler: /<token>/r/<id> -> Weiterleitung zum Artikel
-    location ~ ^/[A-Za-z0-9_-]+/r/[A-Za-z0-9_-]{1,64}$ {
+    # Klick-Zähler /<token>/r/<id>, 👍/👎 /<token>/v/<id>/up|down, Pixel-Messung /<token>/p/<id>.gif
+    location ~ ^/[A-Za-z0-9_-]+/(r/[A-Za-z0-9_-]{1,64}|v/[A-Za-z0-9_-]{1,64}/(up|down)|p/[A-Za-z0-9_-]{1,64}\.gif)$ {
         proxy_pass http://127.0.0.1:8087;
         proxy_set_header Host $host;
         proxy_set_header User-Agent $http_user_agent;
