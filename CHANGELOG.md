@@ -21,6 +21,8 @@
   an entry is opened; `opens-report` evaluates it. Does not count for learning.
 - nginx example: new locations for `/v/` and `/p/`.
 - Status page on phones: no more sideways scrolling; "similar to …" on its own shortened line.
+- `LAYA_MODEL=auto`: articles are grouped by language before Laya runs, so each model is loaded once per
+  run instead of switching (and reloading 1–2 GB) on every block of mixed articles.
 
 ## v1.0 – 2026-10-22
 

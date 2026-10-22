@@ -141,6 +141,15 @@ class LayaFilter:
 
     def _run_laya(self, items: list[dict]) -> None:
         chunk_size = max(1, int(os.environ.get("LAYA_CHUNK", "32") or 32))
+        if not self.model:
+            # LAYA_MODEL=auto: erst alle englischen, dann alle übrigen Artikel. Gemischte Blöcke ließen den
+            # Router bei jedem Block zwischen den Modellen wechseln (je ~1–2 GB neu laden) – das kostet mehr
+            # als das Bewerten selbst. So wird pro Lauf höchstens einmal gewechselt.
+            try:
+                from laya.lang import analyse
+                items = sorted(items, key=lambda it: not analyse(self._state(it)).get("is_english"))
+            except Exception:  # Erkennung ist nur eine Optimierung
+                pass
         used: dict[str, int] = {}
         start = time.monotonic()
         for i in range(0, len(items), chunk_size):
