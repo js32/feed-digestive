@@ -35,6 +35,11 @@ LR = 0.5
 
 def build_dataset(data_dir: Path, feedback_days: int) -> tuple[list[dict], list[int], list[float], dict]:
     history = [r for r in read_jsonl(data_dir / "history.jsonl") if r.get("features")]
+    # Nach geänderten Laya-Fragen passen alte Merkmale nicht mehr zu den neuen – nur den aktuellen
+    # Fragenkatalog verwenden (den des jüngsten Eintrags), sonst lernt das Modell aus Lücken.
+    if history:
+        current = set(history[-1]["features"])
+        history = [r for r in history if set(r["features"]) == current]
     fb = read_jsonl(data_dir / "feedback.jsonl")
     sig, vote = signals(fb), votes(fb)
     settle = (datetime.now(timezone.utc) - timedelta(days=feedback_days)).isoformat()
