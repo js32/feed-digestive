@@ -2,6 +2,15 @@
 
 ## Unreleased
 
+- **Laya tunes itself:** it learns from the LLM's scores which of its answers matter (`LEARN_FROM_LLM`),
+  gets a random control sample from below the cut-off scored too (`PREFILTER_EXPLORE`), and every
+  topic gets seats before the ranking (`PREFILTER_PER_TOPIC`) so rare interests survive.
+- **`python -m app laya-questions`** writes a starter question catalogue from `interests.md`.
+- Changing the wording of a Laya question now triggers re-scoring (question fingerprint per article);
+  learning and `laya-report` only use answers to the current catalogue.
+- Better default penalties: "news" covers war, attacks, disasters, crime and event dates; "promo" no
+  longer hits articles about new products or models.
+
 - **👍 mehr davon / 👎 weniger davon** under each article (`VOTE_LINKS`, on by default). 👍 counts
   more than a star (2.0 vs 1.5), 👎 is an equally strong negative example; the latest vote wins.
 - **Weighted signals:** learning weights each example by its strongest signal – 👍 2.0, ★ 1.5, click 1.0,

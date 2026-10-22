@@ -14,9 +14,11 @@ berechnet:
 """
 from __future__ import annotations
 
+import hashlib
 import json
 import logging
 import os
+import random
 import time
 from pathlib import Path
 
@@ -43,6 +45,8 @@ class LayaFilter:
         log.info("Laya: %d CPU-Threads", threads)
         self.on_chunk = on_chunk  # wird nach jedem Block mit den fertigen Artikeln aufgerufen
         self.spec = load_questions(questions_file)
+        self.version = questions_version(self.spec)
+        self.legacy_version = _legacy_version(self.version)
         # "auto": Laya erkennt die Sprache je Artikel – Englisch -> genaueres englisches
         # Modell, alles andere -> multilingual. Sonst fest vorgegebenes Modell.
         self.model = None if (model or "").lower() == "auto" else model
@@ -109,20 +113,27 @@ class LayaFilter:
             why += f", Malus: {self.spec['penalties'][mal_id].get('label', mal_id)}"
         return round(value, 2), why
 
-    def score(self, items: list[dict], learner=None) -> None:
+    def score(self, items: list[dict], learner=None, distilled=None) -> None:
         """Setzt it['prefilter'] (0–10), it['prefilter_why'] und it['laya_features'].
 
         Artikel mit passenden Merkmalen aus einem früheren Lauf (it['laya_features'] mit
         denselben Fragen) werden nicht neu durch Laya geschickt."""
         keys = self.feature_keys()
-        todo = [it for it in items if set((it.get("laya_features") or {}).keys()) != keys]
+        # neu bewerten, wenn Fragen dazukamen/wegfielen ODER ihr Wortlaut sich geändert hat
+        todo = [it for it in items if set((it.get("laya_features") or {}).keys()) != keys
+                or (it.get("laya_v") or self.legacy_version) != self.version]
         if len(todo) < len(items):
             log.info("Laya: %d Artikel aus früheren Läufen übernommen, %d neu zu bewerten",
                      len(items) - len(todo), len(todo))
         if todo:
             self._run_laya(todo)
         for it in items:
+            it["laya_v"] = self.version
             it["prefilter"], it["prefilter_why"] = self.combine_features(it["laya_features"])
+            if distilled is not None and distilled.active:
+                formula = it["prefilter"]
+                it["prefilter"] = distilled.blend(formula, it["laya_features"])
+                it["prefilter_why"] += f", aus LLM gelernt {10 * distilled.prob(it['laya_features']):.1f}"
             if learner is not None and learner.active:
                 formula = it["prefilter"]
                 it["prefilter"] = learner.blend(formula, it["laya_features"])
@@ -190,13 +201,68 @@ def load_questions(path: Path) -> dict:
 
 
 def apply_prefilter(items: list[dict], flt: LayaFilter, keep: int, min_value: float,
-                    learner=None, min_keep: int = 0) -> list[dict]:
-    flt.score(items, learner)
+                    learner=None, min_keep: int = 0, per_topic: int = 0, explore: int = 0,
+                    distilled=None) -> list[dict]:
+    """Die besten `keep` Artikel fürs LLM. Vorher bekommt jedes Thema bis zu `per_topic` Plätze
+    (seltene Themen gehen sonst unter), danach kommen `explore` Zufallsartikel von unterhalb der
+    Schwelle dazu – das LLM bewertet sie mit, so lernt Laya auch aus dem, was es aussortiert hätte."""
+    flt.score(items, learner, distilled)
     ranked = sorted(items, key=lambda it: -it["prefilter"])
-    kept = [it for it in ranked if it["prefilter"] >= min_value][:keep]
+    kept, ids = [], set()
+
+    def take(it):
+        if it["id"] not in ids and len(kept) < keep:
+            kept.append(it)
+            ids.add(it["id"])
+
+    quota = 0
+    if per_topic > 0:
+        for tid in flt.spec["topics"]:
+            key = f"topic_{tid}"
+            fits = [it for it in ranked if it["laya_features"].get(key, 0) >= 0.5 and it["prefilter"] >= min_value]
+            for it in sorted(fits, key=lambda it: -it["laya_features"][key] * it["prefilter"])[:per_topic]:
+                if it["id"] not in ids:
+                    quota += 1
+                take(it)
+    for it in ranked:
+        if it["prefilter"] >= min_value:
+            take(it)
     # an dünnen Tagen genug für das LLM übrig lassen – Laya ist nur ein grobes Sieb
-    if len(kept) < min(min_keep, keep):
-        kept = ranked[:min(min_keep, keep)]
-    log.info("Laya-Vorfilter: %d von %d Artikeln behalten (bester Wert %.1f, Schwelle %.1f)",
-             len(kept), len(items), ranked[0]["prefilter"] if ranked else 0, min_value)
+    for it in ranked:
+        if len(kept) >= min(min_keep, keep):
+            break
+        take(it)
+    rest = [it for it in ranked if it["id"] not in ids]
+    sample = random.sample(rest, min(explore, len(rest))) if explore > 0 else []
+    for it in sample:
+        it["laya_explore"] = True
+        kept.append(it)
+    log.info("Laya-Vorfilter: %d von %d Artikeln behalten (%d über Themen-Mindestplätze, %d zur Kontrolle "
+             "zufällig von unten; bester Wert %.1f, Schwelle %.1f)", len(kept), len(items), quota, len(sample),
+             ranked[0]["prefilter"] if ranked else 0, min_value)
     return kept
+
+
+def questions_version(spec: dict) -> str:
+    """Fingerabdruck des Fragenkatalogs (Wortlaut zählt) – ändert er sich, wird neu bewertet."""
+    # nur der Wortlaut zählt – Gewichte und Bezeichnungen ändern Layas Antworten nicht
+    raw = json.dumps({"topics": {k: v.get("question") for k, v in spec["topics"].items()},
+                      "depth": [spec["depth"].get("question"), spec["depth"].get("levels")],
+                      "penalties": {k: v.get("question") for k, v in spec["penalties"].items()}},
+                     sort_keys=True, ensure_ascii=False)
+    return hashlib.sha1(raw.encode()).hexdigest()[:10]
+
+
+def _legacy_version(current: str) -> str:
+    """Einträge aus der Zeit vor der Versionierung haben keine Fragen-Version. Sie gelten für den
+    Katalog, der beim ersten Start mit Versionierung aktiv war – ändert er sich danach, werden auch
+    sie neu bewertet."""
+    path = Path(os.environ.get("DATA_DIR", "/data")) / "laya_legacy_version.txt"
+    try:
+        return path.read_text(encoding="utf-8").strip() or current
+    except FileNotFoundError:
+        try:
+            path.write_text(current, encoding="utf-8")
+        except OSError:
+            pass
+        return current

@@ -33,13 +33,23 @@ EPOCHS = 400
 LR = 0.5
 
 
-def build_dataset(data_dir: Path, feedback_days: int) -> tuple[list[dict], list[int], list[float], dict]:
+def current_history(data_dir: Path) -> list[dict]:
+    """Protokollzeilen mit Laya-Merkmalen zum aktuellen Fragenkatalog (dem des jüngsten Eintrags).
+    Nach geänderten Fragen passen alte Antworten nicht mehr – damit zu lernen hieße, aus Lücken zu lernen."""
     history = [r for r in read_jsonl(data_dir / "history.jsonl") if r.get("features")]
-    # Nach geänderten Laya-Fragen passen alte Merkmale nicht mehr zu den neuen – nur den aktuellen
-    # Fragenkatalog verwenden (den des jüngsten Eintrags), sonst lernt das Modell aus Lücken.
-    if history:
-        current = set(history[-1]["features"])
-        history = [r for r in history if set(r["features"]) == current]
+    if not history:
+        return []
+    try:
+        legacy = (data_dir / "laya_legacy_version.txt").read_text(encoding="utf-8").strip() or None
+    except FileNotFoundError:
+        legacy = None
+    version = lambda r: r.get("laya_v") or legacy  # noqa: E731
+    keys, ver = set(history[-1]["features"]), version(history[-1])
+    return [r for r in history if set(r["features"]) == keys and version(r) == ver]
+
+
+def build_dataset(data_dir: Path, feedback_days: int) -> tuple[list[dict], list[int], list[float], dict]:
+    history = current_history(data_dir)
     fb = read_jsonl(data_dir / "feedback.jsonl")
     sig, vote = signals(fb), votes(fb)
     settle = (datetime.now(timezone.utc) - timedelta(days=feedback_days)).isoformat()
@@ -148,6 +158,60 @@ def describe(data_dir: Path, feedback_days: int, labels: dict[str, str]) -> str:
     lines.append(f"Anteil des gelernten Modells am Laya-Wert: {learner.alpha * 100:.0f} %")
     lines.append("Gelernte Gewichte (positiv = mehr davon, negativ = weniger):")
     for name, c in sorted(zip(m["features"], m["coef"]), key=lambda t: -t[1]):
+        bar = ("+" if c > 0 else "−") * min(20, int(abs(c) * 4) + 1)
+        lines.append(f"  {labels.get(name, name):28s} {c:+.2f}  {bar}")
+    return "\n".join(lines)
+
+
+
+# ----------------------------------------------------------------------
+# Aus den LLM-Bewertungen lernen (LEARN_FROM_LLM)
+# ----------------------------------------------------------------------
+MIN_SCORED = 30
+SCORED_FULL = 200   # ab so vielen bewerteten Artikeln zählt das Gelernte zu 90 %
+
+
+class ScoreModel(Learner):
+    """Sagt aus Layas Antworten die LLM-Bewertung (0–10) voraus. Ersetzt nach und nach die feste Formel
+    mit ihren Handgewichten: unscharfe Fragen bekommen von selbst wenig Gewicht, verlässliche viel."""
+
+    def __init__(self, model: dict | None, n: int = 0):
+        super().__init__(model)
+        self.alpha = min(0.9, n / SCORED_FULL) if model else 0.0
+
+
+def retrain_from_llm(data_dir: Path) -> ScoreModel:
+    latest: dict[str, dict] = {}
+    for r in current_history(data_dir):
+        prev = latest.get(str(r["entry_id"]), {})
+        latest[str(r["entry_id"])] = {**prev, **{k: v for k, v in r.items() if v is not None}}
+    rows = [r for r in latest.values() if isinstance(r.get("score"), (int, float))]
+    if len(rows) < MIN_SCORED:
+        log.info("Aus LLM lernen: erst %d bewertete Artikel mit aktuellen Laya-Fragen (nötig %d) – nur Formel",
+                 len(rows), MIN_SCORED)
+        return ScoreModel(None)
+    X = [r["features"] for r in rows]
+    y = [max(0.0, min(1.0, float(r["score"]) / 10)) for r in rows]  # weiche Labels 0–1
+    model = train(X, y, [1.0] * len(rows))
+    model.update({"trained_at": datetime.now(timezone.utc).isoformat(), "n": len(rows)})
+    path = data_dir / "laya_from_llm.json"
+    tmp = path.with_suffix(".tmp")
+    tmp.write_text(json.dumps(model, ensure_ascii=False, indent=1), encoding="utf-8")
+    tmp.replace(path)
+    m = ScoreModel(model, len(rows))
+    log.info("Aus LLM lernen: Modell aus %d bewerteten Artikeln, Anteil am Laya-Wert %.0f %%",
+             len(rows), m.alpha * 100)
+    return m
+
+
+def describe_llm(data_dir: Path, labels: dict[str, str]) -> str:
+    m = retrain_from_llm(data_dir)
+    if not m.active:
+        return (f"Aus LLM-Bewertungen: noch kein Modell – nötig sind {MIN_SCORED} vom LLM bewertete Artikel "
+                "mit dem aktuellen Laya-Fragenkatalog.")
+    lines = [f"Aus LLM-Bewertungen gelernt ({m.model['n']} Artikel), Anteil am Laya-Wert {m.alpha * 100:.0f} %:",
+             "Gewichte (positiv = spricht für eine gute LLM-Bewertung):"]
+    for name, c in sorted(zip(m.model["features"], m.model["coef"]), key=lambda t: -t[1]):
         bar = ("+" if c > 0 else "−") * min(20, int(abs(c) * 4) + 1)
         lines.append(f"  {labels.get(name, name):28s} {c:+.2f}  {bar}")
     return "\n".join(lines)

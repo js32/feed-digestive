@@ -68,6 +68,9 @@ class Settings:
     prefilter: str = "none"  # none | laya
     prefilter_keep: int = 40
     prefilter_min: float = 2.0
+    prefilter_per_topic: int = 2   # Mindestplätze je Thema, bevor nach Punkten sortiert wird
+    prefilter_explore: int = 5     # so viele zufällige Artikel unter der Schwelle gehen zur Kontrolle ans LLM
+    learn_from_llm: bool = True    # Laya-Gewichte aus den LLM-Bewertungen lernen
     laya_model: str = "auto"
     laya_max_len: int = 1024
     laya_batch_size: int = 8
@@ -158,6 +161,9 @@ class Settings:
             prefilter=(_env("PREFILTER", "none") or "none").lower(),
             prefilter_keep=_int("PREFILTER_KEEP", 40),
             prefilter_min=float(_env("PREFILTER_MIN", "2.0") or 2.0),
+            prefilter_per_topic=_int("PREFILTER_PER_TOPIC", 2),
+            prefilter_explore=_int("PREFILTER_EXPLORE", 5),
+            learn_from_llm=_bool("LEARN_FROM_LLM", True),
             laya_model=_env("LAYA_MODEL", "auto") or "auto",
             laya_max_len=_int("LAYA_MAX_LEN", 1024),
             laya_batch_size=_int("LAYA_BATCH_SIZE", 8),

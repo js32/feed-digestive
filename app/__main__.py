@@ -7,6 +7,7 @@
   python -m app learn     zeigen, was aus Klicks und Sternen gelernt wurde
   python -m app laya-report  auswerten, welche Laya-Fragen etwas taugen
   python -m app opens-report [Tage]  Pixel-Messung auswerten (OPEN_PIXEL=log)
+  python -m app laya-questions  Laya-Fragen aus interests.md erzeugen
   python -m app privacy-report [Tage]  was in den letzten Tagen an LLM-Anbieter ging
 """
 from __future__ import annotations
@@ -274,6 +275,12 @@ def main() -> None:
             labels["depth"] = "Tiefe"
             labels.update({f"penalty_{k}": "Malus " + v.get("label", k) for k, v in spec.get("penalties", {}).items()})
         print(describe(s.data_dir, s.feedback_days, labels))
+        from .learn import describe_llm
+        print()
+        print(describe_llm(s.data_dir, labels))
+    elif cmd == "laya-questions":
+        from .laya_questions import run as make_questions
+        make_questions(s)
     elif cmd == "opens-report":
         days = int(sys.argv[2]) if len(sys.argv) > 2 and sys.argv[2].isdigit() else 14
         print(feedback.opens_report(s.data_dir, days))

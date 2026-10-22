@@ -1,15 +1,15 @@
 {
-  "_info": "Fragen für den Laya-Vorfilter. Englisch funktioniert am zuverlässigsten. weight 0–1 = Priorität des Themas.",
+  "_info": "Fragen für den Laya-Vorfilter (Englisch funktioniert am besten). Einfacher: python -m app laya-questions erzeugt sie aus interests.md. weight 0–1 = Priorität.",
   "topics": {
     "topic_a": {
       "label": "Thema A",
       "weight": 1.0,
-      "question": "Is the main topic of this article <your main interest>?"
+      "question": "Is <your main interest> the central subject of this article, not just a side mention?"
     },
     "topic_b": {
       "label": "Thema B",
       "weight": 0.8,
-      "question": "Is the main topic of this article <another interest>?"
+      "question": "Does this article explain or discuss <another interest>? Answer no for news about politics, war or events."
     },
     "curious": {
       "label": "Food for thought",
@@ -29,8 +29,8 @@
   },
   "penalties": {
     "promo": {
-      "label": "PR/Produktnews",
-      "question": "Is this mainly a product announcement, press release, deal, sponsored content or rumour?"
+      "label": "Werbung/PR",
+      "question": "Is this an advertisement, sponsored post, press release or shopping deal?"
     },
     "clickbait": {
       "label": "Clickbait/Boulevard",
@@ -38,7 +38,7 @@
     },
     "news": {
       "label": "Tagesnachricht",
-      "question": "Is this a short news report about a current event, such as a protest, election, accident or political statement?"
+      "question": "Is this a short news report about a current event, for example war, attacks, politics, disasters, crime or an event date?"
     }
   }
 }

@@ -59,7 +59,8 @@ def log_history(data_dir: Path, run_id: str, items: list[dict], shown_ids: set[i
     now = datetime.now(timezone.utc).isoformat()
     rows = [{
         "run": run_id, "ts": now, "entry_id": str(it["id"]), "url": it["url"], "title": it["title"],
-        "feed": it["feed"], "features": it.get("laya_features"), "prefilter": it.get("prefilter"),
+        "feed": it["feed"], "features": it.get("laya_features"), "laya_v": it.get("laya_v"),
+        "prefilter": it.get("prefilter"),
         "score": it.get("score"), "shown": str(it["id"]) in {str(x) for x in shown_ids},
     } for it in items]
     _append(data_dir / "history.jsonl", rows)
@@ -69,9 +70,11 @@ def load_cache(data_dir: Path) -> dict[str, dict]:
     """Bisheriges Wissen je Artikel: zuletzt bekannte Laya-Merkmale, LLM-Wert, schon gezeigt?"""
     cache: dict[str, dict] = {}
     for r in read_jsonl(data_dir / "history.jsonl"):
-        c = cache.setdefault(str(r.get("entry_id")), {"features": None, "score": None, "shown": False})
+        c = cache.setdefault(str(r.get("entry_id")), {"features": None, "laya_v": None, "score": None,
+                                                     "shown": False})
         if r.get("features"):
             c["features"] = r["features"]
+            c["laya_v"] = r.get("laya_v")
         if r.get("score") is not None:
             c["score"] = r["score"]
         c["shown"] = c["shown"] or bool(r.get("shown"))
@@ -82,7 +85,8 @@ def load_cache(data_dir: Path) -> dict[str, dict]:
     for d in digests:
         for it in d.get("items", []):
             if it.get("entry_id") is not None:
-                cache.setdefault(str(it["entry_id"]), {"features": None, "score": None, "shown": False})["shown"] = True
+                cache.setdefault(str(it["entry_id"]), {"features": None, "laya_v": None, "score": None,
+                                                       "shown": False})["shown"] = True
     return cache
 
 

@@ -145,13 +145,37 @@ all new articles ──► Laya (local, question catalogue) ──► top 40 ─
 ```
 
 Enabled with `PREFILTER=laya` (the default image includes Laya; build with `WITH_LAYA=0` for a
-slim image without it). The questions live in `config/laya_questions.json`:
+slim image without it). The questions live in `config/laya_questions.json`. You don't have to
+write them yourself:
+
+```bash
+docker compose exec digest python -m app laya-questions   # from config/interests.md
+```
+
+writes a starter catalogue from your interest profile (via the summary LLM; the `local-only` part
+only goes to a local model). An existing catalogue is never overwritten – the suggestion lands in
+`laya_questions.suggested.json`. The catalogue has three parts:
 
 - `topics`: one yes/no question per interest, each with a weight (0–1)
 - `depth`: a scale from "short news item" to "exceptional essay or major finding"
 - `penalties`: reasons to drop an article (press release, clickbait, …)
 
-Score = 10 × best weighted topic probability × (0.4 + 0.6 × depth) × (1 − 0.8 × penalty).
+Laya is a coarse sieve; the fine judgement comes from the LLM. Three things keep it from losing
+good articles, without any hand-tuning:
+
+- **It learns from the LLM** (`LEARN_FROM_LLM`): every day the LLM scores the articles Laya let
+  through, and Laya's answers for those are known. A small regression learns which answers predict
+  a good LLM score – vague questions get little weight, reliable ones a lot. From 30 scored articles
+  on it replaces the starting formula step by step (90 % from 200 on). `python -m app learn` shows
+  the learned weights.
+- **A control sample** (`PREFILTER_EXPLORE=5`): a few random articles from *below* the cut-off go to
+  the LLM too. That's what lets the model learn what it would otherwise throw away – and if the LLM
+  likes one, it can still make the digest.
+- **Seats per topic** (`PREFILTER_PER_TOPIC=2`): before sorting by score, every topic gets its best
+  articles through, so rare interests aren't crowded out by frequent ones.
+
+Starting formula: 10 × best weighted topic probability × (0.4 + 0.6 × depth) × (1 − 0.8 × penalty).
+Changing the wording of a question makes Laya re-score all articles on the next run.
 Narrow, concrete questions work better than broad ones. Questions are best written in English;
 the articles themselves can be in any language (`LAYA_MODEL=auto` picks the English or multilingual checkpoint per article).
 
@@ -315,6 +339,9 @@ are never shown again.
 | `PREFILTER` | `none` | `laya` scores all candidates locally first; only the best go to the LLM. `none` sends all candidates to the LLM. |
 | `PREFILTER_KEEP` | `40` | How many of Laya's best articles are passed on to the LLM. |
 | `PREFILTER_MIN` | `2.0` | Laya score (0–10) below which an article is dropped. At least 3 × `MIN_ITEMS` are always kept (up to `PREFILTER_KEEP`). |
+| `PREFILTER_PER_TOPIC` | `2` | Seats per topic: each topic's best articles go to the LLM first, so rare interests aren't crowded out. `0` = off. |
+| `PREFILTER_EXPLORE` | `5` | Random articles from below the cut-off that the LLM scores as well – training data for `LEARN_FROM_LLM` and a second chance for articles Laya misjudged. |
+| `LEARN_FROM_LLM` | `true` | Learn Laya's weights from the LLM scores (from 30 scored articles on), replacing the hand-set weights and formula step by step. |
 | `LAYA_MODEL` | `auto` | `auto`: English articles to the English checkpoint, others to the multilingual one. `multilingual` or `english`: one model for all (less RAM). |
 | `LAYA_MAX_LEN` | `1024` | Maximum tokens per article Laya reads. Lower (e.g. 512) is faster and uses less RAM. |
 | `LAYA_BATCH_SIZE` | `8` | Articles per forward pass. Lower (e.g. 2) uses less RAM. |

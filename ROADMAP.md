@@ -54,7 +54,9 @@ The goal is to send as little about *you* as possible.
       per Laya's authors) – implemented on branch `onnx`, merged once tested on a real checkpoint
 - [ ] int4 weight-only variant as an option, checked against your own data with `laya-export --check`
       (int8 dropped: Laya's authors measured a real accuracy loss)
-- [ ] Smaller default question catalogue (fewer, merged topics)
+- [x] Laya learns its weights from the LLM scores, plus control sample and seats per topic
+- [x] `laya-questions`: starter catalogue generated from `interests.md`
+- [ ] Re-score articles with feedback after a catalogue change (fetch them again from the reader), so learning from clicks doesn't restart
 - [ ] Load Laya in bfloat16 as a memory-saving option (only pays off on CPUs with BF16 support)
 
 ## Learning

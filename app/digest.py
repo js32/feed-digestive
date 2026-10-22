@@ -374,6 +374,7 @@ def _run(s: Settings, dry_run: bool = False) -> dict | None:
         c = cache.get(str(it["id"]))
         if c:
             it["laya_features"] = c["features"]
+            it["laya_v"] = c.get("laya_v")
             it["cached_score"] = c["score"]
     log.info("%d nach Filter/Deduplizierung (%d waren schon im Digest)", len(items), before - len(items))
 
@@ -408,8 +409,14 @@ def _run(s: Settings, dry_run: bool = False) -> dict | None:
             flt = LayaFilter(s.config_dir / "laya_questions.json", model=s.laya_model,
                              max_len=s.laya_max_len, batch_size=s.laya_batch_size, on_chunk=save_chunk)
             all_scored = items  # fürs Protokoll: auch Aussortierte (können später einen Stern bekommen)
+            distilled = None
+            if s.learn_from_llm and s.scoring_provider != "none":
+                from .learn import retrain_from_llm
+                distilled = retrain_from_llm(s.data_dir)
             items = apply_prefilter(items, flt, s.prefilter_keep, s.prefilter_min, learner,
-                                    min_keep=3 * s.min_items)
+                                    min_keep=3 * s.min_items, per_topic=s.prefilter_per_topic,
+                                    explore=s.prefilter_explore if s.scoring_provider != "none" else 0,
+                                    distilled=distilled)
         else:
             all_scored = items
 

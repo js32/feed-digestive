@@ -58,8 +58,19 @@ def report(data_dir: Path, config_dir: Path) -> str:
         return "Noch keine Laya-Daten in data/history.jsonl – erst einen Lauf mit PREFILTER=laya machen."
 
     current = set(labels) or {k for r in rows for k in r["features"]}
-    stale = sum(1 for r in rows if not current <= set(r["features"]))
-    rows = [r for r in rows if current <= set(r["features"])]
+    # nur Antworten auf den aktuellen Wortlaut der Fragen (siehe laya_filter.questions_version)
+    version = legacy = None
+    if spec:
+        from .laya_filter import questions_version
+        version = questions_version(spec)
+        try:
+            legacy = (data_dir / "laya_legacy_version.txt").read_text(encoding="utf-8").strip() or None
+        except FileNotFoundError:
+            legacy = version
+    fits = lambda r: current <= set(r["features"]) and (  # noqa: E731
+        version is None or (r.get("laya_v") or legacy) == version)
+    stale = sum(1 for r in rows if not fits(r))
+    rows = [r for r in rows if fits(r)]
     # nur deutliche Signale (Klick, Stern, 👍) – "angelesen" ist zu schwach für diesen Vergleich
     from .feedback import signals
     positive = {eid for eid, k in signals(read_jsonl(data_dir / "feedback.jsonl")).items()
