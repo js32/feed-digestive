@@ -385,6 +385,7 @@ def _run(s: Settings, dry_run: bool = False) -> dict | None:
         if not dry_run:
             starred_entries = src.starred() if (s.use_starred or s.learn) else []
             feedback.collect_stars(s.data_dir, starred_entries)
+            feedback.collect_reader_reads(s, src)
         else:
             starred_entries = src.starred() if s.use_starred else []
         learner = None

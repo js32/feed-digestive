@@ -50,14 +50,16 @@ def _run_safely(s: Settings, source: str = "Zeitplan") -> bool:
 
 
 def _poll_stars(s: Settings) -> None:
-    """Sterne regelmäßig übernehmen, nicht nur beim täglichen Lauf – so zeigt die Status-Seite sie bald
+    """Sterne und Angelesenes regelmäßig übernehmen, nicht nur beim täglichen Lauf – so zeigt die Status-Seite sie bald
     an. Während eines Laufs nicht: der übernimmt sie selbst."""
     while True:
         time.sleep(s.star_poll_minutes * 60)
         if status.run_active(s.data_dir):
             continue
         try:
-            feedback.collect_stars(s.data_dir, make_source(s).starred(), quiet=True)
+            src = make_source(s)
+            feedback.collect_stars(s.data_dir, src.starred(), quiet=True)
+            feedback.collect_reader_reads(s, src, quiet=True)
         except Exception as e:
             log.warning("Sterne-Abgleich fehlgeschlagen: %s", e)
 

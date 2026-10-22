@@ -60,7 +60,9 @@ def report(data_dir: Path, config_dir: Path) -> str:
     current = set(labels) or {k for r in rows for k in r["features"]}
     stale = sum(1 for r in rows if not current <= set(r["features"]))
     rows = [r for r in rows if current <= set(r["features"])]
-    positive = {str(r["entry_id"]) for r in read_jsonl(data_dir / "feedback.jsonl")}
+    # nur deutliche Signale (Klick, Stern) – "angelesen" ist zu schwach für diesen Vergleich
+    positive = {str(r["entry_id"]) for r in read_jsonl(data_dir / "feedback.jsonl")
+                if (r.get("kind") or "click") in ("click", "star")}
     for r in rows:
         r["_pos"] = str(r["entry_id"]) in positive
     scored = [r for r in rows if isinstance(r.get("score"), (int, float))]

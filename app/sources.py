@@ -51,6 +51,11 @@ class Source:
         """Alle ungelesenen Einträge, neueste zuerst, höchstens limit."""
         raise NotImplementedError
 
+    def digest_reads(self, feed_path: str, limit: int = 300) -> list[dict] | None:
+        """Einträge des eigenen Digest-Feeds, die im Reader gelesen wurden: [{"url", "changed_at"}].
+        None = von dieser Quelle nicht unterstützt."""
+        return None
+
 
 # ----------------------------------------------------------------------
 # Miniflux (native API)
@@ -102,6 +107,17 @@ class MinifluxSource(Source):
                 if len(batch) < 100:
                     break
         return [self._norm(e) for e in out[:limit]]
+
+    def digest_reads(self, feed_path, limit=300):
+        feeds = self.mf._get("/feeds")
+        mine = [f for f in feeds if feed_path and feed_path in (f.get("feed_url") or "")]
+        out = []
+        for f in mine:
+            data = self.mf._get(f"/feeds/{f['id']}/entries", status="read", order="id",
+                                direction="desc", limit=limit)
+            out += [{"url": e.get("url") or "", "changed_at": e.get("changed_at")}
+                    for e in data.get("entries") or []]
+        return out
 
     def starred(self, limit=300):
         try:

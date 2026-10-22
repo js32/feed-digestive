@@ -59,6 +59,9 @@ The goal is to send as little about *you* as possible.
 
 ## Learning
 
+- [x] Three weighted signals: read in the reader (Miniflux, `FEED_MODE=items`), clicked, starred
+- [ ] "Read" signal for Google Reader API sources
+
 - [ ] Fine-tune Laya on your own clicks and stars once enough feedback has accumulated
 - [ ] Optional: mark articles as read in the reader once they've been shown in a digest
 

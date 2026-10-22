@@ -724,6 +724,7 @@ function itemRow(it, withWhy) {
   if (withWhy && it.why) text.append(el("p", "item-why", it.why));
   const meta = el("div", "item-meta");
   meta.append(el("span", "", it.feed || ""));
+  if (it.read && !it.clicked) meta.append(badge("gray", "👁 angelesen"));
   if (it.clicked) meta.append(badge("ok", "✓ angeklickt"));
   if (it.starred) meta.append(badge("warn", "★ Stern"));
   if (it.explore) meta.append(badge("run", "Zufallsfund"));
@@ -742,9 +743,11 @@ function renderDigest() {
     body.append(el("p", "empty", "Noch kein Digest gespeichert. Der erste entsteht beim nächsten Lauf."));
   } else {
     $("digest-h").textContent = `Digest vom ${d.date}`;
-    const read = d.items.filter((it) => it.clicked).length;
+    const n = (f) => d.items.filter(f).length;
+    const seen = n((it) => it.read && !it.clicked), clicked = n((it) => it.clicked), starred = n((it) => it.starred);
+    const parts = [seen && `${seen} angelesen`, clicked && `${clicked} angeklickt`, starred && `${starred} mit Stern`].filter(Boolean);
     $("digest-note").textContent = `${d.items.length} von ${d.considered ?? "?"} Artikeln ausgewählt`
-      + (read ? `, ${read} davon schon angeklickt` : "") + `. ${status.digest_count} Digests im Feed.`;
+      + (parts.length ? `, davon ${parts.join(", ")}` : "") + `. ${status.digest_count} Digests im Feed.`;
     let group = null, list = null;
     for (const it of d.items) {
       const topic = it.topic || "";

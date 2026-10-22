@@ -1,5 +1,12 @@
 # Changelog
 
+## Unreleased
+
+- **Three interest signals:** read in your reader (0.3), clicked "→ Zum Artikel" (1.0), starred (1.5).
+  "Read" comes from Miniflux's read status of digest entries (`FEED_MODE=items`); bulk "mark all as
+  read" is ignored. Learning weights each example by its strongest signal; the status page shows
+  👁 angelesen next to ✓ angeklickt and ★ Stern.
+
 ## v1.0 – 2026-10-22
 
 First stable release. Runs daily in production on a small VPS (2 vCPU, Miniflux, Mistral).

@@ -229,19 +229,31 @@ With `GROUP_TOPICS=true` (default) the summary model sorts the selected articles
 sections in one short extra call (titles and "why read" only). Articles that fit no group go under
 "Weitere Themen"; in `FEED_MODE=items` the topic is set as the entry's category.
 
-## Learning from clicks and stars
+## Learning from what you read
 
-feed-digestive learns what you actually read, and keeps that knowledge on your server.
+feed-digestive learns what you actually read, and keeps that knowledge on your server. Three
+signals count, each article by its strongest one:
+
+| Signal | How it's detected | Weight |
+|---|---|---|
+| 👁 **Read in your reader** | the reader marks the digest entry as read (needs `FEED_MODE=items`, Miniflux) | 0.3 |
+| ✓ **Clicked "→ Zum Artikel"** | redirect through your own server | 1.0 |
+| ★ **Starred** | star in your reader, on the digest entry or the original article | 1.5 |
 
 - **Clicks:** links in the digest point to `your.domain/<token>/r/<id>`, which records the click
   and redirects to the article. Crawlers, link previews and scripts don't count. The target
   site sees neither your secret path (`Referrer-Policy: no-referrer`) nor that you came from the digest.
+- **Read:** with `FEED_MODE=items` every article is its own entry, so the reader's read status
+  tells which ones you opened. Fetched from Miniflux every `STAR_POLL_MINUTES` and on each run.
+  "Mark all as read" doesn't count: 4 or more entries marked within 15 seconds are ignored. If your
+  reader marks entries as read while scrolling, this signal gets noisy – turn that off in the reader.
+  Not yet available with the Google Reader API.
 - **Stars:** stars in your reader, on original articles or on digest entries, are collected on
-  every run.
-- **Learning:** a small logistic regression on Laya's answers predicts what you'll click. It
-  kicks in after 5 positive and 10 negative examples, and its share of the score grows with
-  feedback up to 80%. A shown article only counts as "not interesting" after `FEEDBACK_DAYS`
-  without a click.
+  every run and every `STAR_POLL_MINUTES`.
+- **Learning:** a small logistic regression on Laya's answers predicts what you'll be interested
+  in, with each example weighted by its signal. It kicks in after 5 weighted positive and 10
+  negative examples, and its share of the score grows with feedback up to 80%. A shown article only
+  counts as "not interesting" after `FEEDBACK_DAYS` without any signal.
 - **Filter bubble:** one slot per digest (`EXPLORE_SLOTS`) is a 🎲 random pick from just below
   the cut-off, so topics the model underrates still get a chance.
 
@@ -375,7 +387,7 @@ At most 3 articles per source feed are taken, unless that's needed to reach `MIN
 
 | Setting | Default | Description |
 |---|---|---|
-| `FEED_MODE` | `daily` | `daily`: one feed entry per digest with all articles. `items`: one feed entry per article. Takes effect on the next start. |
+| `FEED_MODE` | `daily` | `daily`: one feed entry per digest with all articles. `items`: one feed entry per article – also enables the "read in your reader" signal. Takes effect on the next start. |
 | `FEED_TITLE` | `Mein Tages-Digest` | Title of the feed in your reader. |
 | `KEEP_DAYS` | `30` | How long digests stay in the feed. |
 | `PUBLIC_URL` | `http://localhost:8080` | Public base URL as your reader sees it, e.g. `https://digest.example.org`. Used for feed and click links. |

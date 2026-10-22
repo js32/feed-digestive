@@ -2,7 +2,7 @@
 
 Alles liegt lokal in data/:
   history.jsonl   ein Eintrag pro bewertetem Artikel und Lauf (Merkmale, Werte, gezeigt ja/nein)
-  feedback.jsonl  ein Eintrag pro Klick bzw. neuem Stern
+  feedback.jsonl  ein Eintrag pro Signal: "read" (im Reader angelesen), "click" (Zum Artikel), "star"
 """
 from __future__ import annotations
 
@@ -22,6 +22,11 @@ BOT_RE = re.compile(r"miniflux|bot|crawl|spider|preview|curl|wget|python|httpx|f
 TRACK_RE = re.compile(r"/r/([A-Za-z0-9_-]+)(?:$|[?#])")
 ID_RE = re.compile(r"^[A-Za-z0-9_-]{1,64}$")
 HISTORY_DAYS = 180
+
+# Wie stark ein Signal für Interesse spricht (Gewicht beim Lernen). Zählt pro Artikel das stärkste.
+SIGNAL_WEIGHTS = {"read": 0.3, "click": 1.0, "star": 1.5}
+# "Alle als gelesen markieren": so viele Einträge innerhalb weniger Sekunden zählen nicht als angelesen
+BULK_MIN, BULK_SECONDS = 4, 15
 
 
 def _append(path: Path, rows: list[dict]) -> None:
@@ -153,3 +158,91 @@ def collect_stars(data_dir: Path, starred_entries: list[dict], quiet: bool = Fal
     if new or not quiet:  # beim Lauf immer, beim regelmäßigen Abgleich nur wenn sich etwas tut
         log.info("Sterne: %d im Feedreader, %d neu übernommen", len(starred_entries), len(new))
     return len(new)
+
+
+# ----------------------------------------------------------------------
+# Im Reader angelesen (Digest-Einträge, die der Reader als gelesen meldet)
+# ----------------------------------------------------------------------
+def signals(rows: list[dict]) -> dict[str, dict[str, float]]:
+    """entry_id -> {kind: Gewicht} aus feedback.jsonl."""
+    out: dict[str, dict[str, float]] = {}
+    for r in rows:
+        kind = r.get("kind") or "click"
+        if kind in SIGNAL_WEIGHTS:
+            out.setdefault(str(r.get("entry_id")), {})[kind] = SIGNAL_WEIGHTS[kind]
+    return out
+
+
+def _bulk(times: list[float]) -> set[int]:
+    """Indizes von Einträgen, die in einem Rutsch als gelesen markiert wurden."""
+    order = sorted(range(len(times)), key=lambda i: times[i])
+    bulk, start = set(), 0
+    for end in range(1, len(order) + 1):
+        if end == len(order) or times[order[end]] - times[order[end - 1]] > BULK_SECONDS:
+            group = order[start:end]
+            if len(group) >= BULK_MIN:
+                bulk.update(group)
+            start = end
+    return bulk
+
+
+def collect_reads(data_dir: Path, read_entries: list[dict], day_only: bool = False, quiet: bool = False) -> int:
+    """Gelesene Digest-Einträge aus dem Reader als schwaches Signal "read" übernehmen.
+
+    read_entries: Einträge des Digest-Feeds im Reader mit Status gelesen, je {"url", "changed_at"}.
+    Die Artikel-ID steckt im /r/<id>-Link; ohne Klick-Tracking wird über die URL zugeordnet.
+    Massen-Markierungen ("alle gelesen") werden ignoriert.
+    """
+    if not read_entries:
+        return 0
+    try:
+        digests = json.loads((data_dir / "digests.json").read_text(encoding="utf-8"))
+    except (FileNotFoundError, json.JSONDecodeError):
+        digests = []
+    by_url = {it.get("url"): str(it.get("entry_id")) for d in digests for it in d.get("items", [])}
+    shown = set(by_url.values())
+    known = {str(r["entry_id"]) for r in read_jsonl(data_dir / "feedback.jsonl") if r.get("kind") == "read"}
+
+    times = []
+    for e in read_entries:
+        t = e.get("changed_at")
+        try:
+            times.append(datetime.fromisoformat(str(t).replace("Z", "+00:00")).timestamp())
+        except ValueError:
+            times.append(0.0)
+    bulk = _bulk(times)
+    new, skipped = [], 0
+    for i, e in enumerate(read_entries):
+        m = TRACK_RE.search(e.get("url") or "")
+        eid = m.group(1) if m else by_url.get(e.get("url"))
+        if not eid or eid not in shown or eid in known:
+            continue
+        if i in bulk:
+            skipped += 1
+            continue
+        when = datetime.fromtimestamp(times[i], timezone.utc) if times[i] else datetime.now(timezone.utc)
+        if day_only:
+            when = when.replace(hour=0, minute=0, second=0, microsecond=0)
+        known.add(eid)
+        new.append({"ts": when.isoformat(), "entry_id": eid, "kind": "read"})
+    _append(data_dir / "feedback.jsonl", new)
+    if new or not quiet:
+        log.info("Angelesen: %d Digest-Einträge gelesen, %d neu übernommen%s", len(read_entries), len(new),
+                 f", {skipped} ignoriert (alle auf einmal als gelesen markiert)" if skipped else "")
+    return len(new)
+
+
+def collect_reader_reads(s, src, quiet: bool = False) -> int:
+    """Angelesen-Signal aus dem Reader holen – nur sinnvoll mit FEED_MODE=items (ein Eintrag je Artikel)."""
+    if s.feed_mode != "items" or not s.learn:
+        return 0
+    try:
+        entries = src.digest_reads(s.feed_path)
+    except Exception as e:  # Reader kurz weg: nächstes Mal wieder
+        log.warning("Angelesen-Abgleich fehlgeschlagen: %s", e)
+        return 0
+    if entries is None:
+        if not quiet:
+            log.info("Angelesen: mit dieser Quelle (noch) nicht unterstützt – nur Klicks und Sterne")
+        return 0
+    return collect_reads(s.data_dir, entries, day_only=s.privacy == "strict", quiet=quiet)

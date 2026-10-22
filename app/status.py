@@ -288,7 +288,7 @@ def _scores(rows: list[dict]) -> dict:
 
 
 def _reactions(rows: list[dict]) -> dict:
-    out: dict[str, set] = {"click": set(), "star": set()}
+    out: dict[str, set] = {"read": set(), "click": set(), "star": set()}
     for r in rows:
         if r.get("kind") in out:
             out[r["kind"]].add(str(r.get("entry_id")))
@@ -334,6 +334,7 @@ def snapshot(s: Settings) -> dict:
             "considered": latest.get("considered"),
             "items": [{**{k: it.get(k) for k in ("digest_title", "title", "url", "feed", "score",
                                                    "why", "topic", "explore", "filler", "similar_to")},
+                       "read": str(it.get("entry_id")) in reactions["read"],
                        "clicked": str(it.get("entry_id")) in reactions["click"],
                        "starred": str(it.get("entry_id")) in reactions["star"]}
                       for it in latest.get("items", [])],
