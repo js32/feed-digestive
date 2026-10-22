@@ -10,6 +10,7 @@
   python -m app laya-questions  Laya-Fragen aus interests.md erzeugen
   python -m app privacy-report [Tage]  was in den letzten Tagen an LLM-Anbieter ging
   python -m app laya-export [--check N]  Laya als ONNX-Datei exportieren und mit PyTorch vergleichen
+  python -m app laya-compare [--check N]  nur vergleichen (nach erfolgtem Export)
 """
 from __future__ import annotations
 
@@ -308,11 +309,20 @@ def main() -> None:
     elif cmd == "privacy-report":
         days = int(sys.argv[2]) if len(sys.argv) > 2 and sys.argv[2].isdigit() else 30
         print(audit.report(s.data_dir, days))
-    elif cmd == "laya-export":
-        from .laya_onnx import export
+    elif cmd in ("laya-export", "laya-compare"):
+        from . import laya_onnx
         args = sys.argv[2:]
         n = int(args[args.index("--check") + 1]) if "--check" in args else 5
-        export(s, check=n)
+        if cmd == "laya-export":
+            laya_onnx.export(s, check=n)
+        else:
+            laya_onnx.compare(s, n)
+    elif cmd == "_laya-export-one":  # intern: ein Modell im eigenen Prozess
+        from .laya_onnx import export_one
+        export_one(s, sys.argv[2])
+    elif cmd == "_laya-compare-one":
+        from .laya_onnx import compare_one
+        compare_one(s, sys.argv[2], sys.argv[3])
     elif cmd == "laya-report":
         from .laya_report import report
         print(report(s.data_dir, s.config_dir))
