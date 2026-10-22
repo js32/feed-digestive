@@ -58,7 +58,7 @@ body {
 a { color: inherit; }
 :focus-visible { outline: 2px solid var(--brand); outline-offset: 2px; }
 svg.icon { width: 16px; height: 16px; flex: none; stroke: currentColor; fill: none; stroke-width: 1.6; stroke-linecap: round; stroke-linejoin: round; }
-.wrap { max-width: 1200px; margin: 0 auto; padding: 32px 24px 48px; }
+.wrap { max-width: 1200px; margin: 0 auto; padding: 32px 24px 48px; overflow-x: clip; }
 
 /* ---------- Kopf ---------- */
 .eyebrow { margin: 0 0 4px; font-size: 13px; color: var(--text-3); }
@@ -170,11 +170,15 @@ button.badge[aria-expanded="true"] .chev { transform: rotate(180deg); }
   box-shadow: inset 0 0 0 1px var(--brand-ring);
   font-size: 13px; font-weight: 600;
 }
-.item-title { font-weight: 600; line-height: 1.4; }
+.item-title { font-weight: 600; line-height: 1.4; overflow-wrap: anywhere; }
 .item-title a { text-decoration: none; }
 .item-title a:hover { color: var(--brand); }
-.item-why { margin: 4px 0 0; color: var(--text-2); }
-.item-meta { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; margin-top: 8px; font-size: 12px; color: var(--text-3); }
+.item-why { margin: 4px 0 0; color: var(--text-2); overflow-wrap: anywhere; }
+.item-similar { margin-top: 6px; font-size: 12px; color: var(--text-3); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.item-similar b { font-weight: 500; color: var(--text-2); }
+.item-meta { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; margin-top: 8px; font-size: 12px; color: var(--text-3); min-width: 0; }
+.item-meta > span:first-child { overflow-wrap: anywhere; }
+.item-meta .badge { white-space: normal; max-width: 100%; }
 .empty { padding: 20px 24px; margin: 0; color: var(--text-3); }
 
 /* ---------- Score-Verteilung ---------- */
@@ -288,6 +292,11 @@ details.raw .tbl th, details.raw .tbl td { padding-left: 0; padding-right: 16px;
   .list li, .group, .toolbar, .empty, .services li { padding-left: 16px; padding-right: 16px; }
   .services li { align-items: start; }
   .tbl th, .tbl td { padding-left: 16px; padding-right: 8px; }
+  table.tbl { display: block; overflow-x: auto; }
+  .list li { grid-template-columns: 32px minmax(0, 1fr); gap: 12px; }
+  .score { width: 28px; height: 28px; font-size: 12px; }
+  .kv li { flex-wrap: wrap; }
+  .kv .v { flex: 1 0 auto; }
   #log .ln { padding: 0 16px; grid-template-columns: minmax(0, 1fr); gap: 0; }
   /* Schritte senkrecht */
   .steps { grid-template-columns: minmax(0, 1fr); }
@@ -731,8 +740,13 @@ function itemRow(it, withWhy) {
   if (it.down) meta.append(badge("gray", "👎 weniger davon"));
   if (it.explore) meta.append(badge("run", "Zufallsfund"));
   if (it.filler) meta.append(badge("gray", "Auffüller"));
-  if (it.similar_to) meta.append(badge("gray", `ähnlich zu „${it.similar_to}“`));
   text.append(meta);
+  if (it.similar_to) {  // eigene Zeile, bei Bedarf gekürzt – der volle Titel steht im Tooltip
+    const sim = el("div", "item-similar");
+    sim.title = it.similar_to;
+    sim.append("☆ ähnlich zu ", el("b", "", `„${it.similar_to}“`));
+    text.append(sim);
+  }
   li.append(text);
   return li;
 }
