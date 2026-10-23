@@ -98,6 +98,7 @@ class Settings:
     top_n: int = 10
     min_score: int = 6
     min_items: int = 5
+    max_per_topic: int = 3   # höchstens so viele Artikel je Thema, solange andere Themen mithalten
     floor_score: int = 3
     output_language: str = "Deutsch"
     feed_mode: str = "daily"  # daily | items
@@ -186,6 +187,7 @@ class Settings:
             top_n=_int("TOP_N", 10),
             min_score=_int("MIN_SCORE", 6),
             min_items=_int("MIN_ITEMS", 5),
+            max_per_topic=_int("MAX_PER_TOPIC", 3),
             floor_score=_int("FLOOR_SCORE", 3),
             output_language=_env("OUTPUT_LANGUAGE", "Deutsch") or "Deutsch",
             feed_mode=(_env("FEED_MODE", "daily") or "daily").lower(),

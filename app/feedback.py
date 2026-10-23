@@ -60,7 +60,7 @@ def log_history(data_dir: Path, run_id: str, items: list[dict], shown_ids: set[i
     rows = [{
         "run": run_id, "ts": now, "entry_id": str(it["id"]), "url": it["url"], "title": it["title"],
         "feed": it["feed"], "features": it.get("laya_features"), "laya_v": it.get("laya_v"),
-        "prefilter": it.get("prefilter"),
+        "prefilter": it.get("prefilter"), "topic": it.get("score_topic"),
         "score": it.get("score"), "shown": str(it["id"]) in {str(x) for x in shown_ids},
     } for it in items]
     _append(data_dir / "history.jsonl", rows)
@@ -77,6 +77,8 @@ def load_cache(data_dir: Path) -> dict[str, dict]:
             c["laya_v"] = r.get("laya_v")
         if r.get("score") is not None:
             c["score"] = r["score"]
+        if r.get("topic"):
+            c["topic"] = r["topic"]
         c["shown"] = c["shown"] or bool(r.get("shown"))
     try:
         digests = json.loads((data_dir / "digests.json").read_text(encoding="utf-8"))

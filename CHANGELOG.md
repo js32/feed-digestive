@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- **Topic variety (`MAX_PER_TOPIC=3`):** the scoring LLM also assigns each article a topic; at most 3 per topic
+  go in first, free seats go to other topics scoring up to one point below `MIN_SCORE`.
 - **Laya tunes itself:** it learns from the LLM's scores which of its answers matter (`LEARN_FROM_LLM`),
   gets a random control sample from below the cut-off scored too (`PREFILTER_EXPLORE`), and every
   topic gets seats before the ranking (`PREFILTER_PER_TOPIC`) so rare interests survive.

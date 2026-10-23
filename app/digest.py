@@ -171,8 +171,16 @@ def prepare(entries: list[dict], s: Settings, cutoff: datetime) -> list[dict]:
     return out
 
 
-def score(items: list[dict], llm: LLM, profile: str, batch_size: int) -> None:
+TOPIC_HINT = """
+
+Ordne jeden Artikel zusätzlich genau einem Thema zu und gib es als "topic" mit an, z. B.
+{{"id": 1, "score": 6, "why": "…", "topic": "…"}}. Wähle aus dieser Liste: {topics}, Sonstiges."""
+
+
+def score(items: list[dict], llm: LLM, profile: str, batch_size: int, topics: list[str] | None = None) -> None:
     system = SCORING_SYSTEM.format(profile=profile)
+    if topics:  # Thema je Artikel – damit die Auswahl nicht nur aus einem Thema besteht (MAX_PER_TOPIC)
+        system += TOPIC_HINT.format(topics=", ".join(topics))
     for i in range(0, len(items), batch_size):
         batch = items[i:i + batch_size]
         # kurze laufende Nummern statt Quell-IDs: LLMs schreiben lange Hex-IDs gern falsch ab
@@ -205,6 +213,8 @@ def score(items: list[dict], llm: LLM, profile: str, batch_size: int) -> None:
             except (TypeError, ValueError):
                 continue
             it["score_why"] = str(r.get("why", ""))[:200]
+            if r.get("topic"):
+                it["score_topic"] = str(r["topic"]).strip()[:40]
         log.info("Batch %d/%d bewertet", i // batch_size + 1, -(-len(items) // batch_size))
 
 
@@ -216,20 +226,41 @@ def duplicate_of(it: dict, chosen: list[dict], threshold: float) -> dict | None:
     return next((c for c in chosen if similarity(it, c) >= threshold), None)
 
 
+def topic_of(it: dict, labels: dict[str, str] | None = None) -> str | None:
+    """Thema eines Artikels: vom LLM beim Bewerten zugeordnet, sonst Layas stärkste Themenfrage."""
+    t = (it.get("score_topic") or "").strip()
+    if t and t.lower() not in ("sonstiges", "other", "-"):
+        return t.lower()
+    f = it.get("laya_features") or {}
+    best = max((k for k in f if k.startswith("topic_")), key=lambda k: f[k], default=None)
+    if best and f[best] >= 0.5:
+        return ((labels or {}).get(best) or best).lower()
+    return None
+
+
 def select(items: list[dict], top_n: int, min_score: int,
-           min_items: int = 0, floor_score: int = 0, dedup: float = 0) -> list[dict]:
+           min_items: int = 0, floor_score: int = 0, dedup: float = 0,
+           max_per_topic: int = 0, labels: dict[str, str] | None = None) -> list[dict]:
     """Beste Artikel ab min_score; reicht das nicht für min_items, wird mit den nächstbesten
     ab floor_score aufgefüllt (erst mit, dann ohne Begrenzung pro Feed). Mit dedup > 0 fliegt
-    jeder Artikel raus, der einem schon gewählten zu ähnlich ist – der besser bewertete bleibt."""
+    jeder Artikel raus, der einem schon gewählten zu ähnlich ist – der besser bewertete bleibt.
+
+    Mit max_per_topic > 0 kommen von einem Thema erst einmal höchstens so viele Artikel rein.
+    Freie Plätze gehen dann zuerst an andere Themen, die knapp unter min_score liegen (einen Punkt
+    Spielraum), und erst danach an weitere Artikel der schon starken Themen."""
     ranked = sorted((it for it in items if it.get("score") is not None),
                     key=lambda it: (-it["score"], -len(it["text"])))
     per_feed: dict = {}
+    per_topic: dict = {}
     chosen, ids, dupes = [], set(), set()
 
-    def take(it, cap: bool) -> bool:
+    def take(it, cap: bool, topic_cap: bool = False) -> bool:
         if it["id"] in ids or it["id"] in dupes or len(chosen) >= top_n:
             return False
         if cap and per_feed.get(it["feed_id"], 0) >= MAX_PER_FEED:
+            return False
+        topic = topic_of(it, labels)
+        if topic_cap and topic and per_topic.get(topic, 0) >= max_per_topic:
             return False
         if (twin := duplicate_of(it, chosen, dedup)) is not None:
             dupes.add(it["id"])
@@ -237,10 +268,23 @@ def select(items: list[dict], top_n: int, min_score: int,
                      it["title"], it["feed"], twin["title"], twin["feed"])
             return False
         per_feed[it["feed_id"]] = per_feed.get(it["feed_id"], 0) + 1
+        if topic:
+            per_topic[topic] = per_topic.get(topic, 0) + 1
         chosen.append(it)
         ids.add(it["id"])
         return True
 
+    if max_per_topic > 0:
+        for it in ranked:
+            if it["score"] >= min_score:
+                take(it, cap=True, topic_cap=True)
+        before = len(chosen)
+        for it in ranked:  # andere Themen knapp darunter bekommen den Vorzug
+            if it["score"] >= min_score - 1:
+                take(it, cap=True, topic_cap=True)
+        if len(chosen) > before:
+            log.info("Themenvielfalt: %d Artikel knapp unter %d aus weniger vertretenen Themen", len(chosen) - before,
+                     min_score)
     for it in ranked:
         if it["score"] >= min_score:
             take(it, cap=True)
@@ -376,6 +420,8 @@ def _run(s: Settings, dry_run: bool = False) -> dict | None:
             it["laya_features"] = c["features"]
             it["laya_v"] = c.get("laya_v")
             it["cached_score"] = c["score"]
+            if c.get("topic"):
+                it["score_topic"] = c["topic"]
     log.info("%d nach Filter/Deduplizierung (%d waren schon im Digest)", len(items), before - len(items))
 
 
@@ -437,7 +483,10 @@ def _run(s: Settings, dry_run: bool = False) -> dict | None:
             log.info("Bewerte %d Artikel mit %s (%d aus früheren Läufen), Auszüge mit %s",
                      len(todo), scorer, len(items) - len(todo), summarizer)
             if todo:
-                score(todo, scorer, build_profile(s, starred, local=scorer.is_local), s.scoring_batch_size)
+                topics = ([t.get("label", k) for k, t in flt.spec["topics"].items()]
+                          if s.prefilter == "laya" else None)
+                score(todo, scorer, build_profile(s, starred, local=scorer.is_local), s.scoring_batch_size,
+                      topics=topics if s.max_per_topic > 0 else None)
                 for it in todo:
                     if it.get("score") is not None:
                         it["_fresh"] = True
@@ -461,7 +510,8 @@ def _run(s: Settings, dry_run: bool = False) -> dict | None:
                 emb = None
 
         chosen = select(items, max(1, s.top_n - s.explore_slots), s.min_score,
-                        s.min_items, s.floor_score, dedup)
+                        s.min_items, s.floor_score, dedup, s.max_per_topic,
+                        flt.labels() if s.prefilter == "laya" else None)
         # Zufallsfund gegen die Filterblase: ein Artikel knapp unterhalb der Auswahl
         # erst ab genug regulären Treffern – an dünnen Tagen kein halber Digest aus Zufall
         if s.explore_slots > 0 and len(chosen) >= s.explore_min_regular:
