@@ -246,6 +246,7 @@ def apply_prefilter(items: list[dict], flt: LayaFilter, keep: int, min_value: fl
     for it in sample:
         it["laya_explore"] = True
         kept.append(it)
+    _log_topics(flt, items, kept)
     log.info("Laya-Vorfilter: %d von %d Artikeln behalten (%d über Themen-Mindestplätze, %d zur Kontrolle "
              "zufällig von unten; bester Wert %.1f, Schwelle %.1f)", len(kept), len(items), quota, len(sample),
              ranked[0]["prefilter"] if ranked else 0, min_value)
@@ -275,3 +276,21 @@ def _legacy_version(current: str) -> str:
         except OSError:
             pass
         return current
+
+
+def _log_topics(flt: LayaFilter, items: list[dict], kept: list[dict]) -> None:
+    """Welches Thema wie oft durchkam – macht sichtbar, ob die Vorauswahl einseitig ist."""
+    labels = {f"topic_{k}": t.get("label", k) for k, t in flt.spec["topics"].items()}
+
+    def best(it):
+        f = it.get("laya_features") or {}
+        k = max(labels, key=lambda k: f.get(k, 0.0))
+        return labels[k] if f.get(k, 0.0) >= 0.5 else "ohne Thema"
+
+    total, passed = {}, {}
+    for it in items:
+        total[best(it)] = total.get(best(it), 0) + 1
+    for it in kept:
+        passed[best(it)] = passed.get(best(it), 0) + 1
+    parts = [f"{t} {passed.get(t, 0)}/{n}" for t, n in sorted(total.items(), key=lambda x: -passed.get(x[0], 0))]
+    log.info("Laya-Vorauswahl nach Thema (durchgelassen/Kandidaten): %s", ", ".join(parts))
