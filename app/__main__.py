@@ -225,6 +225,15 @@ def check(s: Settings) -> None:
                  "text": "Researchers released a new open-weight LLM that outperforms larger models on coding tasks."}
         flt.score([probe])
         print(f"✓ Laya ({s.laya_model}): Testartikel bekommt {probe['prefilter']}/10 – {probe['prefilter_why']}")
+    if s.prefilter == "embeddings":
+        from .embed_filter import EmbedFilter
+        flt = EmbedFilter(s)
+        probe = {"id": "check-probe", "feed": "Test",
+                 "title": "New open-weight language model beats GPT on coding benchmarks",
+                 "text": "Researchers released a new open-weight LLM that outperforms larger models on coding tasks."}
+        flt.score([probe])
+        print(f"✓ Embedding-Vorfilter ({len(flt.spec['topics'])} Themen, {len(flt.positives)} Favoriten): "
+              f"Testartikel bekommt {probe['prefilter']}/10 – {probe['prefilter_why']}")
     if s.embeddings:
         try:
             from .embed import Embedder, similarity
@@ -274,6 +283,12 @@ def main() -> None:
             labels = {f"topic_{k}": "Thema " + v.get("label", k) for k, v in spec.get("topics", {}).items()}
             labels["depth"] = "Tiefe"
             labels.update({f"penalty_{k}": "Malus " + v.get("label", k) for k, v in spec.get("penalties", {}).items()})
+        if s.prefilter == "embeddings":
+            from .embed_filter import parse_interests
+            imd = s.config_dir / "interests.md"
+            topics, _ = parse_interests(imd.read_text(encoding="utf-8") if imd.exists() else "")
+            labels = {f"topic_{k}": "Thema " + v["label"] for k, v in topics.items()}
+            labels.update({"like": "Ähnlich zu deinen Favoriten", "dislike": "Ähnlich zu Abgelehntem"})
         print(describe(s.data_dir, s.feedback_days, labels))
         from .learn import describe_llm
         print()

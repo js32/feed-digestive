@@ -46,7 +46,7 @@ The goal is to send as little about *you* as possible.
 - [x] `python -m app laya-report`: which Laya questions help, overlap, and where Laya and the LLM disagree
 - [ ] Interest profile export: topic clusters + keywords from your stars as TOML/CSV
       (`python -m app profile`), optionally suggesting new `laya_questions.json` topics
-- [ ] Embeddings as learning features, so learning from clicks works without Laya
+- [x] Embeddings as learning features, so learning from clicks works without Laya (`PREFILTER=embeddings`)
 
 ## Performance
 

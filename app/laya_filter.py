@@ -247,7 +247,7 @@ def apply_prefilter(items: list[dict], flt: LayaFilter, keep: int, min_value: fl
         it["laya_explore"] = True
         kept.append(it)
     _log_topics(flt, items, kept)
-    log.info("Laya-Vorfilter: %d von %d Artikeln behalten (%d über Themen-Mindestplätze, %d zur Kontrolle "
+    log.info("Vorfilter: %d von %d Artikeln behalten (%d über Themen-Mindestplätze, %d zur Kontrolle "
              "zufällig von unten; bester Wert %.1f, Schwelle %.1f)", len(kept), len(items), quota, len(sample),
              ranked[0]["prefilter"] if ranked else 0, min_value)
     return kept
@@ -293,4 +293,4 @@ def _log_topics(flt: LayaFilter, items: list[dict], kept: list[dict]) -> None:
     for it in kept:
         passed[best(it)] = passed.get(best(it), 0) + 1
     parts = [f"{t} {passed.get(t, 0)}/{n}" for t, n in sorted(total.items(), key=lambda x: -passed.get(x[0], 0))]
-    log.info("Laya-Vorauswahl nach Thema (durchgelassen/Kandidaten): %s", ", ".join(parts))
+    log.info("Vorauswahl nach Thema (durchgelassen/Kandidaten): %s", ", ".join(parts))

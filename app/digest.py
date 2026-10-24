@@ -436,7 +436,8 @@ def _run(s: Settings, dry_run: bool = False) -> dict | None:
         else:
             starred_entries = src.starred() if s.use_starred else []
         learner = None
-        if s.prefilter == "laya" and s.learn:
+        local_filter = s.prefilter in ("laya", "embeddings")
+        if local_filter and s.learn:
             from .learn import retrain
             learner = retrain(s.data_dir, s.feedback_days)
         starred = [f"{e['feed_title']}: {e['title']}" for e in starred_entries[:30]] if s.use_starred else []
@@ -444,16 +445,23 @@ def _run(s: Settings, dry_run: bool = False) -> dict | None:
         # Auszüge brauchen ggf. nur die Interessen (SUMMARY_PROFILE=lean), nicht Beispiele und Sterne
         summary_profile = build_profile(s, starred, full=s.summary_profile == "full", local=summarizer.is_local)
 
-        # Stufe 0 (optional): lokaler Vorfilter mit Laya, schickt nichts nach außen
-        if s.prefilter == "laya":
-            from .laya_filter import LayaFilter, apply_prefilter
-            def save_chunk(chunk):  # Zwischenstand sichern – ein Abbruch kostet so keine Arbeit
-                if not dry_run:
-                    feedback.log_history(s.data_dir, run_id, chunk, set())
-                    for it in chunk:
-                        it["_logged"] = True
-            flt = LayaFilter(s.config_dir / "laya_questions.json", model=s.laya_model,
-                             max_len=s.laya_max_len, batch_size=s.laya_batch_size, on_chunk=save_chunk)
+        # Stufe 0 (optional): lokaler Vorfilter mit Laya oder Embeddings, schickt nichts nach außen
+        flt = None
+        if local_filter:
+            from .laya_filter import apply_prefilter
+            if s.prefilter == "embeddings":
+                from .embed_filter import EmbedFilter
+                flt = EmbedFilter(s, starred_entries)
+            else:
+                from .laya_filter import LayaFilter
+
+                def save_chunk(chunk):  # Zwischenstand sichern – ein Abbruch kostet so keine Arbeit
+                    if not dry_run:
+                        feedback.log_history(s.data_dir, run_id, chunk, set())
+                        for it in chunk:
+                            it["_logged"] = True
+                flt = LayaFilter(s.config_dir / "laya_questions.json", model=s.laya_model,
+                                 max_len=s.laya_max_len, batch_size=s.laya_batch_size, on_chunk=save_chunk)
             all_scored = items  # fürs Protokoll: auch Aussortierte (können später einen Stern bekommen)
             distilled = None
             if s.learn_from_llm and s.scoring_provider != "none":
@@ -483,8 +491,7 @@ def _run(s: Settings, dry_run: bool = False) -> dict | None:
             log.info("Bewerte %d Artikel mit %s (%d aus früheren Läufen), Auszüge mit %s",
                      len(todo), scorer, len(items) - len(todo), summarizer)
             if todo:
-                topics = ([t.get("label", k) for k, t in flt.spec["topics"].items()]
-                          if s.prefilter == "laya" else None)
+                topics = [t.get("label", k) for k, t in flt.spec["topics"].items()] if flt else None
                 score(todo, scorer, build_profile(s, starred, local=scorer.is_local), s.scoring_batch_size,
                       topics=topics if s.max_per_topic > 0 else None)
                 for it in todo:
@@ -492,10 +499,10 @@ def _run(s: Settings, dry_run: bool = False) -> dict | None:
                         it["_fresh"] = True
         # Stufe 2 (optional): lokale Embeddings für Duplikate, Themen und Stern-Vergleich
         emb, dedup = None, 0.0
-        if s.embeddings:
+        if s.embeddings or s.prefilter == "embeddings":
             try:
                 from .embed import Embedder
-                emb = Embedder(s.embedding_model, s.data_dir)
+                emb = flt.embedder if s.prefilter == "embeddings" else Embedder(s.embedding_model, s.data_dir)
                 pool_top = sorted(all_scored, key=_rank)[:EXPLORE_POOL + s.top_n]
                 cands = {it["id"]: it for it in
                          [*(it for it in items if (it.get("score") or -1) >= s.floor_score), *pool_top]}
@@ -511,7 +518,7 @@ def _run(s: Settings, dry_run: bool = False) -> dict | None:
 
         chosen = select(items, max(1, s.top_n - s.explore_slots), s.min_score,
                         s.min_items, s.floor_score, dedup, s.max_per_topic,
-                        flt.labels() if s.prefilter == "laya" else None)
+                        flt.labels() if flt else None)
         # Zufallsfund gegen die Filterblase: ein Artikel knapp unterhalb der Auswahl
         # erst ab genug regulären Treffern – an dünnen Tagen kein halber Digest aus Zufall
         if s.explore_slots > 0 and len(chosen) >= s.explore_min_regular:

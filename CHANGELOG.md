@@ -2,6 +2,9 @@
 
 ## Unreleased
 
+- **`PREFILTER=embeddings`:** a light local pre-filter with the existing sentence embeddings instead of Laya –
+  compares articles with the topics in `interests.md`, your examples, stars and 👍/👎. Seconds instead of hours,
+  ~200 MB instead of ~2.5 GB RAM; seats per topic, control sample and both learning paths work unchanged.
 - **Topic variety (`MAX_PER_TOPIC=3`):** the scoring LLM also assigns each article a topic; at most 3 per topic
   go in first, free seats go to other topics scoring up to one point below `MIN_SCORE`.
 - **Laya tunes itself:** it learns from the LLM's scores which of its answers matter (`LEARN_FROM_LLM`),

@@ -65,7 +65,7 @@ class Settings:
     summary_model: str = ""
     scoring_batch_size: int = 40
     # Laya-Vorfilter
-    prefilter: str = "none"  # none | laya
+    prefilter: str = "none"  # none | laya | embeddings
     prefilter_keep: int = 40
     prefilter_min: float = 2.0
     prefilter_per_topic: int = 2   # Mindestplätze je Thema, bevor nach Punkten sortiert wird
@@ -243,8 +243,8 @@ class Settings:
             errors.append("SUMMARY_PROFILE muss 'full' oder 'lean' sein")
         if self.select_from not in ("unread", "new"):
             errors.append("SELECT_FROM muss 'unread' oder 'new' sein")
-        if self.prefilter not in ("none", "laya"):
-            errors.append("PREFILTER muss 'none' oder 'laya' sein")
+        if self.prefilter not in ("none", "laya", "embeddings"):
+            errors.append("PREFILTER muss 'none', 'laya' oder 'embeddings' sein")
         if self.scoring_provider == "none" and self.prefilter != "laya":
             errors.append("SCORING_PROVIDER=none geht nur zusammen mit PREFILTER=laya")
         for stage, prov, model in (("SCORING", self.scoring_provider, self.scoring_model),

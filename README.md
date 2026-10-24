@@ -138,6 +138,27 @@ Rough daily volume for 300 new articles without Laya: ~8 scoring calls of 10–1
 each, plus ~10 excerpt calls of 5–8k tokens. With Laya in front, only ~40 articles reach the
 scoring model.
 
+### Embeddings pre-filter (light)
+
+```
+all articles ──► embeddings (local) ──► similar to your topics & favourites? ──► top 40 ──► LLM scoring ──► …
+```
+
+`PREFILTER=embeddings` turns every article into a vector with the same small local model used for
+duplicate detection (fastembed, ~200 MB, a fraction of a second per article, no PyTorch) and
+compares it with:
+
+- **your topics:** the bullet points under "Hohe Priorität" / "Mittlere Priorität" in `interests.md`
+  (high = weight 1.0, medium = 0.8; the `local-only` part counts too, nothing leaves the server),
+- **your favourites:** `examples.txt`, starred articles, and digest articles you 👍, starred or clicked,
+- **what you don't want:** the bullets under "Niedrige Priorität / eher nicht" and 👎 articles.
+
+That gives one feature per topic plus "like" and "dislike" – the same kind of answers Laya gives, so
+seats per topic, the control sample, learning from clicks and learning from the LLM work the same
+way. Embeddings judge *what an article is about*, not how deep it is; the LLM takes care of quality.
+Needs an image built with `WITH_EMBEDDINGS=1` (the default). Compare both with
+`docker compose logs digest | grep "Vorauswahl nach Thema"`.
+
 ### Laya pre-filter
 
 ```
@@ -337,7 +358,7 @@ are never shown again.
 
 | Setting | Default | Description |
 |---|---|---|
-| `PREFILTER` | `none` | `laya` scores all candidates locally first; only the best go to the LLM. `none` sends all candidates to the LLM. |
+| `PREFILTER` | `none` | Score all candidates locally first; only the best go to the LLM. `embeddings` is the light option (seconds, ~200 MB), `laya` the heavier one (~2.5 GB RAM, slow on small CPUs). `none` sends all candidates to the LLM. |
 | `PREFILTER_KEEP` | `40` | How many of Laya's best articles are passed on to the LLM. |
 | `PREFILTER_MIN` | `2.0` | Laya score (0–10) below which an article is dropped. At least 3 × `MIN_ITEMS` are always kept (up to `PREFILTER_KEEP`). |
 | `PREFILTER_PER_TOPIC` | `2` | Seats per topic: each topic's best articles go to the LLM first, so rare interests aren't crowded out. `0` = off. |
