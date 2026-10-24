@@ -7,18 +7,21 @@ actually match your interests, writes a short excerpt for each and publishes the
 **Atom feed**, which you subscribe to in that same reader. 300 articles in, 10 worth reading out.
 
 ```
-feed reader ──► dedupe ──► Laya (local, optional) ──► LLM scoring ──► top 10 ──► excerpts ──► feed.xml
-   ▲                                                                                              │
-   └──────────── stars & clicks ◄── learns your taste ◄── you read the digest ◄──────────────────┘
+feed reader ──► dedupe ──► local pre-filter ──► LLM scoring ──► top 10 ──► excerpts ──► feed.xml
+                            (embeddings or Laya)                                               │
+   ▲                                                                                           │
+   └──── 👍/👎, stars & clicks ◄── learns your taste ◄── you read the digest ◄─────────────────┘
 ```
 
 ## What it does
 
 - **Reads your feed reader:** Miniflux (native API) or anything that speaks the Google Reader
   API (FreshRSS, Inoreader, The Old Reader, BazQux, Miniflux, Tiny Tiny RSS / Nextcloud News via plugin).
-- **Filters locally:** [Laya](https://laya.convaiinnovations.com/), a small decision model
-  (~320M parameters) running on your CPU, pre-scores every article against a question catalogue,
-  so nothing leaves your server for that step.
+- **Filters locally:** a pre-filter on your own server sorts out the bulk before anything goes to
+  an LLM – either light sentence embeddings that compare articles with your topics and favourites
+  (seconds, ~200 MB), or [Laya](https://laya.convaiinnovations.com/), a small decision model that
+  answers a question catalogue (heavier). It tunes itself from the LLM's scores, and every topic
+  gets seats so rare interests aren't drowned out by frequent ones.
 - **Scores and summarises with an LLM of your choice:** Anthropic, OpenAI, Mistral, OpenRouter,
   Gemini, Ollama (local) or any OpenAI-compatible endpoint. Scoring and excerpts can use
   different providers, e.g. a cheap model for scoring and a good one for writing.
@@ -27,8 +30,9 @@ feed reader ──► dedupe ──► Laya (local, optional) ──► LLM scor
 - **Sorts locally:** optional sentence embeddings (fastembed, no PyTorch) spot the same story
   from several sources and tell you which of your starred articles a suggestion resembles.
 - **Groups by topic:** the digest comes in sections like "Rechenzentren" or "Gesundheit".
-- **Learns from you:** clicks in the digest and stars in your reader train a small model on top
-  of Laya's answers. A 🎲 random pick per digest keeps the filter bubble in check.
+- **Learns from you:** 👍 "mehr davon" / 👎 "weniger davon" under each article, clicks and stars
+  train a small local model. A 🎲 random pick per digest and a cap per topic keep the filter bubble
+  in check.
 - **Publishes a feed:** one daily digest entry, or one entry per article. Excerpts in the
   language of your choice, whatever language the original is in.
 - **Shows what it's doing:** a status page with the current run, the latest digest, how scores
@@ -43,7 +47,9 @@ feed reader ──► dedupe ──► Laya (local, optional) ──► LLM scor
 - A feed reader with API access (see [Sources](#sources))
 - An API key for at least one LLM provider, or Ollama for fully local operation
 - A reverse proxy with HTTPS (example config for nginx included) so your reader can fetch the feed
-- With Laya: about 2 GB of free RAM during the nightly run and ~1.5 GB of disk for image and model
+- Disk and RAM depend on the pre-filter: with `PREFILTER=embeddings` ~250 MB RAM and ~0.5 GB disk;
+  with `PREFILTER=laya` about 2–2.5 GB of free RAM during the nightly run and 1.5–3 GB of disk for
+  image and models
 
 ## Installation
 
@@ -76,6 +82,7 @@ DIGEST_TIME=06:30
 TZ=Europe/Berlin
 OUTPUT_LANGUAGE=English
 ARTICLES=8-10                        # at least 8, at most 10 articles per digest
+PREFILTER=embeddings                 # light local pre-filter, see "Choosing a pre-filter"
 # PRIVACY=strict                     # send as little about you as possible, see Privacy
 ```
 
@@ -86,12 +93,12 @@ Then build, check and do a test run:
 
 ```bash
 docker compose up -d --build
-docker compose exec digest python -m app check     # reader, Laya and LLMs reachable?
+docker compose exec digest python -m app check     # reader, pre-filter and LLMs working?
 docker compose exec digest python -m app dry-run   # full run, prints the result, saves nothing
 docker compose exec digest python -m app run       # create a real digest now
 ```
 
-The first `check` downloads the Laya model (~1 GB) into `data/hf`.
+The first `check` downloads the local models into `data/` (embeddings ~220 MB, Laya ~1–3 GB).
 
 **Reverse proxy:** the container only listens on `127.0.0.1:8087`. Copy
 `deploy/nginx.conf.example`, replace `digest.example.org` with your domain, get a certificate
@@ -134,9 +141,36 @@ All settings live in `.env`. The most important ones are explained below; every 
 | Ollama | `ollama` | – | local; `OLLAMA_BASE_URL` |
 | Anything else | `custom` | `CUSTOM_API_KEY` | `CUSTOM_BASE_URL`, any OpenAI-compatible API |
 
-Rough daily volume for 300 new articles without Laya: ~8 scoring calls of 10–15k input tokens
-each, plus ~10 excerpt calls of 5–8k tokens. With Laya in front, only ~40 articles reach the
-scoring model.
+Rough daily volume for 300 new articles without a pre-filter: ~8 scoring calls of 10–15k input
+tokens each, plus ~10 excerpt calls of 5–8k tokens. With a pre-filter, only ~40–60 articles reach
+the scoring model.
+
+### Choosing a pre-filter
+
+| `PREFILTER` | What it does | Speed (2 vCPU) | RAM | Good for |
+|---|---|---|---|---|
+| `none` | every candidate goes to the LLM | – | – | few feeds, or privacy isn't a concern |
+| `embeddings` | compares articles with your topics, favourites and dislikes | seconds | ~250 MB | most setups, small servers |
+| `laya` | a decision model answers a question catalogue (topic, depth, PR …) | ~35–100 s per article | 2–2.5 GB | strong CPU, judging depth before the LLM |
+
+Switching is one line in `.env` plus `docker compose up -d`; both are in the default image.
+Whichever you choose, the same three things keep the pre-filter from losing good articles,
+without any hand-tuning:
+
+- **It learns from the LLM** (`LEARN_FROM_LLM`): every day the LLM scores the articles that got
+  through, and the pre-filter's answers for those are known. A small regression learns which
+  answers predict a good LLM score – vague ones get little weight, reliable ones a lot. From 30
+  scored articles on it replaces the starting formula step by step (90 % from 200 on).
+  `python -m app learn` shows the learned weights.
+- **A control sample** (`PREFILTER_EXPLORE=5`): a few random articles from *below* the cut-off go to
+  the LLM too. That's what lets the model learn what it would otherwise throw away – and if the LLM
+  likes one, it can still make the digest.
+- **Seats per topic** (`PREFILTER_PER_TOPIC=2`): before sorting by score, every topic gets its best
+  articles through, so rare interests aren't crowded out by frequent ones. With many feeds on one
+  subject (say, tech), raise it to 4 and `PREFILTER_KEEP` to 60.
+
+After each run the log shows how many articles per topic got through:
+`Vorauswahl nach Thema (durchgelassen/Kandidaten): KI 12/420, Tierethik 3/4, …`
 
 ### Embeddings pre-filter (light)
 
@@ -154,10 +188,15 @@ compares it with:
 - **what you don't want:** the bullets under "Niedrige Priorität / eher nicht" and 👎 articles.
 
 That gives one feature per topic plus "like" and "dislike" – the same kind of answers Laya gives, so
-seats per topic, the control sample, learning from clicks and learning from the LLM work the same
-way. Embeddings judge *what an article is about*, not how deep it is; the LLM takes care of quality.
-Needs an image built with `WITH_EMBEDDINGS=1` (the default). Compare both with
-`docker compose logs digest | grep "Vorauswahl nach Thema"`.
+everything above works the same way. Embeddings judge *what an article is about*, not how deep it is;
+the LLM takes care of quality. The starting formula is
+10 × (½ like + ½ best weighted topic) × (1 − 0.6 × dislike).
+
+Write `interests.md` as bullet points under `## Hohe Priorität`, `## Mittlere Priorität` and
+`## Niedrige Priorität / eher nicht` (see the template) – each bullet becomes one topic. The more
+concrete the description after the colon, the better the matching. If `interests.md` has no such
+bullets, the topics of `laya_questions.json` are used. Needs an image built with
+`WITH_EMBEDDINGS=1` (the default); vectors are cached in `data/embeddings-*.npz`.
 
 ### Laya pre-filter
 
@@ -181,24 +220,16 @@ only goes to a local model). An existing catalogue is never overwritten – the 
 - `depth`: a scale from "short news item" to "exceptional essay or major finding"
 - `penalties`: reasons to drop an article (press release, clickbait, …)
 
-Laya is a coarse sieve; the fine judgement comes from the LLM. Three things keep it from losing
-good articles, without any hand-tuning:
-
-- **It learns from the LLM** (`LEARN_FROM_LLM`): every day the LLM scores the articles Laya let
-  through, and Laya's answers for those are known. A small regression learns which answers predict
-  a good LLM score – vague questions get little weight, reliable ones a lot. From 30 scored articles
-  on it replaces the starting formula step by step (90 % from 200 on). `python -m app learn` shows
-  the learned weights.
-- **A control sample** (`PREFILTER_EXPLORE=5`): a few random articles from *below* the cut-off go to
-  the LLM too. That's what lets the model learn what it would otherwise throw away – and if the LLM
-  likes one, it can still make the digest.
-- **Seats per topic** (`PREFILTER_PER_TOPIC=2`): before sorting by score, every topic gets its best
-  articles through, so rare interests aren't crowded out by frequent ones.
+Laya is a coarse sieve; the fine judgement comes from the LLM. Learning from the LLM, the control
+sample and seats per topic (see above) apply here too. `python -m app laya-report` shows which
+questions help, which overlap and where Laya and the LLM disagree.
 
 Starting formula: 10 × best weighted topic probability × (0.4 + 0.6 × depth) × (1 − 0.8 × penalty).
 Changing the wording of a question makes Laya re-score all articles on the next run.
 Narrow, concrete questions work better than broad ones. Questions are best written in English;
-the articles themselves can be in any language (`LAYA_MODEL=auto` picks the English or multilingual checkpoint per article).
+the articles themselves can be in any language (`LAYA_MODEL=auto` picks the English or multilingual
+checkpoint per article and groups articles by language, so each model is loaded once per run;
+`multilingual` uses one model for all and is faster and lighter).
 
 Two ways to run it:
 - **Laya + LLM** (recommended): `PREFILTER=laya` plus a scoring provider.
@@ -207,8 +238,8 @@ Two ways to run it:
 
 ### Embeddings: duplicates, topics, "similar to your stars"
 
-Enabled with `EMBEDDINGS=true` (the default image includes it; build with `WITH_EMBEDDINGS=0` to
-leave it out). A small multilingual model (~220 MB, downloaded to `data/fastembed/` on first use)
+Enabled with `EMBEDDINGS=true`, and automatically with `PREFILTER=embeddings` (the default image
+includes it; build with `WITH_EMBEDDINGS=0` to leave it out). A small multilingual model (~220 MB, downloaded to `data/fastembed/` on first use)
 turns every candidate into a vector, locally on the CPU in a few seconds. That gives you:
 
 - **One story, one entry:** if two articles tell the same story, e.g. an English and a German
@@ -250,14 +281,15 @@ Your personal profile lives in `config/`, which is git-ignored. The repo only sh
   ```bash
   python3 tools/import_readlater.py ReadLater.json config/examples.txt 200
   ```
-- `config/laya_questions.json`: the Laya question catalogue.
+- `config/laya_questions.json`: the Laya question catalogue (only for `PREFILTER=laya`;
+  `python -m app laya-questions` writes one from `interests.md`).
 - Starred articles in your reader are added to the profile automatically (`USE_MINIFLUX_STARRED`).
 
 ### Which articles are considered
 
 By default (`SELECT_FROM=unread`) every unread article in your reader is a candidate, newest
 first, up to `MAX_ENTRIES` and no older than `UNREAD_MAX_AGE_DAYS`. Articles are scored only
-once: Laya features and LLM scores are cached in `data/history.jsonl` and reused, and anything
+once: pre-filter features and LLM scores are cached in `data/history.jsonl` and reused, and anything
 that already appeared in a digest is never shown again. `SELECT_FROM=new` only looks at articles
 that arrived since the last run.
 
@@ -304,8 +336,9 @@ signals count, each article by its strongest one:
   for everything in advance (then it's useless as a signal).
 - **Stars:** stars in your reader, on original articles or on digest entries, are collected on
   every run and every `STAR_POLL_MINUTES`.
-- **Learning:** a small logistic regression on Laya's answers predicts what you'll be interested
-  in, with each example weighted by its signal. It kicks in after 5 weighted positive and 10
+- **Learning:** a small logistic regression on the pre-filter's answers (Laya or embeddings)
+  predicts what you'll be interested in, with each example weighted by its signal. It works on top
+  of the model learned from the LLM's scores. It kicks in after 5 weighted positive and 10
   negative examples, and its share of the score grows with feedback up to 80%. A shown article only
   counts as "not interesting" after `FEEDBACK_DAYS` without any signal.
 - **Filter bubble:** one slot per digest (`EXPLORE_SLOTS`) is a 🎲 random pick from just below
@@ -319,6 +352,13 @@ docker compose exec digest python -m app opens-report   # result of the OPEN_PIX
 
 Data is kept in `data/history.jsonl` and `data/feedback.jsonl` for 180 days. Set
 `TRACK_CLICKS=false` to learn from stars only.
+
+**Reader settings that matter:**
+- Don't let your reader (e.g. Miniflux "fetch original content") replace the digest entries with the
+  original article: that removes "why read", the excerpt and the 👍/👎 links. Open the full text on
+  demand in the reader instead (Reeder: reader view). Original articles in your normal feeds can stay
+  on full text.
+- Your reader should poll the digest feed at least hourly; the feed changes once a day.
 
 ## Settings reference
 
@@ -354,16 +394,21 @@ Files in `config/` are re-read on every run and need no restart.
 Articles are scored once and the scores reused; articles that already appeared in a digest
 are never shown again.
 
-### Laya pre-filter (local)
+### Pre-filter (local)
 
 | Setting | Default | Description |
 |---|---|---|
 | `PREFILTER` | `none` | Score all candidates locally first; only the best go to the LLM. `embeddings` is the light option (seconds, ~200 MB), `laya` the heavier one (~2.5 GB RAM, slow on small CPUs). `none` sends all candidates to the LLM. |
-| `PREFILTER_KEEP` | `40` | How many of Laya's best articles are passed on to the LLM. |
-| `PREFILTER_MIN` | `2.0` | Laya score (0–10) below which an article is dropped. At least 3 × `MIN_ITEMS` are always kept (up to `PREFILTER_KEEP`). |
+| `PREFILTER_KEEP` | `40` | How many of the pre-filter's best articles are passed on to the LLM. |
+| `PREFILTER_MIN` | `2.0` | Pre-filter score (0–10) below which an article is dropped. At least 3 × `MIN_ITEMS` are always kept (up to `PREFILTER_KEEP`). |
 | `PREFILTER_PER_TOPIC` | `2` | Seats per topic: each topic's best articles go to the LLM first, so rare interests aren't crowded out. `0` = off. |
-| `PREFILTER_EXPLORE` | `5` | Random articles from below the cut-off that the LLM scores as well – training data for `LEARN_FROM_LLM` and a second chance for articles Laya misjudged. |
-| `LEARN_FROM_LLM` | `true` | Learn Laya's weights from the LLM scores (from 30 scored articles on), replacing the hand-set weights and formula step by step. |
+| `PREFILTER_EXPLORE` | `5` | Random articles from below the cut-off that the LLM scores as well – training data for `LEARN_FROM_LLM` and a second chance for articles the pre-filter misjudged. |
+| `LEARN_FROM_LLM` | `true` | Learn the pre-filter's weights from the LLM scores (from 30 scored articles on), replacing the hand-set weights and formula step by step. |
+
+Laya only (`PREFILTER=laya`):
+
+| Setting | Default | Description |
+|---|---|---|
 | `LAYA_MODEL` | `auto` | `auto`: English articles to the English checkpoint, others to the multilingual one. `multilingual` or `english`: one model for all (less RAM). |
 | `LAYA_MAX_LEN` | `1024` | Maximum tokens per article Laya reads. Lower (e.g. 512) is faster and uses less RAM. |
 | `LAYA_BATCH_SIZE` | `8` | Articles per forward pass. Lower (e.g. 2) uses less RAM. |
@@ -377,7 +422,7 @@ The questions Laya asks are in `config/laya_questions.json`.
 
 | Setting | Default | Description |
 |---|---|---|
-| `EMBEDDINGS` | `false` | `true` enables duplicate detection and "similar to your stars". Needs an image built with `WITH_EMBEDDINGS=1`. |
+| `EMBEDDINGS` | `false` | `true` enables duplicate detection and "similar to your stars" (always on with `PREFILTER=embeddings`). Needs an image built with `WITH_EMBEDDINGS=1`. |
 | `EMBEDDING_MODEL` | `sentence-transformers/paraphrase-multilingual-MiniLM-L12-v2` | Any [fastembed model](https://qdrant.github.io/fastembed/examples/Supported_Models/). The multilingual default matches stories across languages. |
 | `DEDUP_SIMILARITY` | `0.75` | Similarity (0–1) from which two articles count as the same story. Lower catches more, but may merge different stories on the same subject. |
 | `SIMILAR_MIN` | `0.55` | Show "Ähnlich zu deinem Stern" from this similarity on. `0` turns it off. |
@@ -386,7 +431,7 @@ The questions Laya asks are in `config/laya_questions.json`.
 
 | Setting | Default | Description |
 |---|---|---|
-| `SCORING_PROVIDER` | `anthropic` | Provider for scoring: `anthropic`, `openai`, `mistral`, `openrouter`, `gemini`, `ollama`, `custom`, or `none` (use the Laya score, requires `PREFILTER=laya`). |
+| `SCORING_PROVIDER` | `anthropic` | Provider for scoring: `anthropic`, `openai`, `mistral`, `openrouter`, `gemini`, `ollama`, `custom`, or `none` (use the pre-filter score, requires `PREFILTER=laya` or `embeddings`). |
 | `SCORING_MODEL` | – | Model name for scoring, e.g. `mistral-small-latest`. |
 | `SUMMARY_PROVIDER` | `anthropic` | Provider for the excerpts (same choices, except `none`). |
 | `SUMMARY_MODEL` | – | Model name for the excerpts, e.g. `mistral-medium-latest`. |
@@ -435,7 +480,7 @@ At most 3 articles per source feed are taken, unless that's needed to reach `MIN
 | Setting | Default | Description |
 |---|---|---|
 | `TRACK_CLICKS` | `true` | Route digest links through `/<token>/r/<id>` and count clicks. `false` uses direct links and learns from stars only. |
-| `LEARN` | `true` | With Laya: learn weights from clicks and stars. |
+| `LEARN` | `true` | With a pre-filter: learn from 👍/👎, clicks and stars. |
 | `FEEDBACK_DAYS` | `3` | A shown article counts as "not interesting" only after this many days without a click. |
 | `PRIVACY` | `standard` | `strict` sends as little about you as possible: only `interests.md` (without its `local-only` part) goes to cloud providers – no examples (`EXAMPLES_IN_PROMPT=0`), no starred titles (`USE_MINIFLUX_STARRED=false`), lean excerpt prompts (`SUMMARY_PROFILE=lean`) – and clicks are stored with their date only. Stars and clicks still train the local model. Any of these set individually in `.env` wins. Scoring gets a bit less precise without examples. |
 | `LLM_AUDIT` | `on` | Log every LLM call to `data/llm_audit.jsonl`: provider, model, purpose, size, article titles and which parts of your profile went along. `full` also stores the complete prompts, `off` disables it. Read it with `privacy-report` or on the status page. |
@@ -470,12 +515,13 @@ don't touch.
 
 | Setting | Default | Description |
 |---|---|---|
-| `WITH_LAYA` | `1` | Build the image with Laya (PyTorch CPU, ~1 GB larger). `0` for a slim image. Needs `docker compose build`. |
+| `WITH_LAYA` | `1` | Build the image with Laya (PyTorch CPU, ~1 GB larger). `0` for a slim image if you use `PREFILTER=embeddings` or `none`. Needs `docker compose build`. |
+| `WITH_EMBEDDINGS` | `1` | Build the image with fastembed (~200 MB), needed for `PREFILTER=embeddings` and `EMBEDDINGS=true`. |
 | `DIGEST_MEM_LIMIT` | `3g` | Memory limit for the digest container. |
 | `DIGEST_CPUS` | `2` | CPU limit for the digest container. |
 | `OLLAMA_MEM_LIMIT` | `6g` | Memory limit for the optional Ollama container. |
 | `HTTP_PORT` | `8080` | Port inside the container. The host port (`127.0.0.1:8087`) is set in `docker-compose.yml`. |
-| `DATA_DIR` | `/data` | State, digests, feed, learning logs and the Laya model (mounted from `./data`). |
+| `DATA_DIR` | `/data` | State, digests, feed, learning logs and the local models (mounted from `./data`). |
 | `CONFIG_DIR` | `/config` | Interest profile, examples and Laya questions (mounted read-only from `./config`). |
 
 ## Operation
@@ -483,13 +529,14 @@ don't touch.
 | Command | What it does |
 |---|---|
 | `docker compose logs -f digest` | follow the logs |
-| `docker compose exec digest python -m app check` | test reader, Laya and LLM connections |
+| `docker compose exec digest python -m app check` | test reader, pre-filter, embeddings and LLM connections |
 | `docker compose exec digest python -m app dry-run` | full run without saving anything |
 | `docker compose exec digest python -m app run` | create a digest now |
-| `docker compose exec digest python -m app learn` | show learned weights |
+| `docker compose exec digest python -m app learn` | show learned weights: from your signals and from the LLM's scores |
 | `docker compose exec digest python -m app privacy-report [days]` | what was sent to LLM providers in the last days (default 30): calls, characters, articles, and which parts of your profile |
 | `docker compose exec digest python -m app opens-report [days]` | evaluate the `OPEN_PIXEL` measurement: does your reader load the image only when you open an entry? |
 | `docker compose exec digest python -m app laya-report` | evaluate each Laya question against LLM scores, clicks and stars (hit rate, correlation, overlaps, disagreements) |
+| `docker compose exec digest python -m app laya-questions` | write a Laya question catalogue from `interests.md` (never overwrites an existing one) |
 
 **Status page:** `https://your.domain/<FEED_TOKEN>/status`, like the feed only reachable via the
 secret path. It shows:
@@ -497,8 +544,8 @@ secret path. It shows:
 - whether a run is in progress, in which stage and why it waits (e.g. a provider's rate limit); the
   browser tab title and icon show the state too
 - the numbers of the current or last run: fetched, new, scored, picked
-- the latest digest grouped by topic, with scores and which articles you clicked or starred, plus
-  the best articles that just missed it
+- the latest digest grouped by topic, with scores and your signals per article (👍, 👎, ★, ✓ clicked),
+  plus the best articles that just missed it
 - how scores of the last 7 days are spread around `MIN_SCORE` and `FLOOR_SCORE`, as a hint for
   tuning the threshold
 - the last runs with duration and result
@@ -506,8 +553,8 @@ secret path. It shows:
 - the live log with filters and search
 
 Click the status badge (or open `…/status#dienste`) to check each service: feed reader login, both
-LLM providers (via their model list, which costs no tokens; skipped while a run is active), Laya,
-embeddings, feed file age, disk space and errors in the last 24 hours.
+LLM providers (via their model list, which costs no tokens; skipped while a run is active), the
+pre-filter, embeddings, feed file age, disk space and errors in the last 24 hours.
 
 Scheduled runs and runs started with `docker compose exec … run` both show up; logs are kept in
 `data/status/` and survive restarts. Both kinds of run share a lock, so a manual run never
@@ -520,7 +567,7 @@ through an SSH tunnel: `ssh -N -L 8087:127.0.0.1:8087 user@server`, then
 
 State lives in `data/` as plain files: `state.json` (where the last run stopped), `digests.json`,
 `feed.xml`, the learning logs (`history.jsonl`, `feedback.jsonl`), the LLM audit log
-(`llm_audit.jsonl`), the status page's log and run history (`status/`) and the Laya model. Deleting `state.json` makes the next run start
+(`llm_audit.jsonl`), the status page's log and run history (`status/`) and the local models. Deleting `state.json` makes the next run start
 over with the last `LOOKBACK_HOURS`.
 
 The container runs as an unprivileged user with a read-only filesystem, no capabilities and
@@ -528,10 +575,10 @@ memory/CPU limits (`DIGEST_MEM_LIMIT`, `DIGEST_CPUS`).
 
 ## Privacy
 
-- **Stays on your server:** your reading history, clicks, stars, the learned model and,
-  with Laya, the pre-filtering of all articles.
+- **Stays on your server:** your reading history, clicks, stars, 👍/👎, the learned models and,
+  with a pre-filter, the pre-sorting of all articles.
 - **Goes to your LLM provider:** titles, snippets and text of the articles being scored or
-  summarised, plus your interest profile. With Laya in front, that's ~40 instead of all
+  summarised, plus your interest profile. With a pre-filter in front, that's ~40–60 instead of all
   articles. Use Ollama if nothing should leave your server.
 - **`PRIVACY=strict`** cuts that down to the minimum: only `interests.md` goes along – no reading
   history examples, no starred titles, lean excerpt prompts – and clicks are stored by date only.
@@ -556,5 +603,5 @@ please get in touch.
 
 This makes feed-digestive *source available*, not open source in the OSI sense.
 
-Dependencies such as httpx, PyTorch and [Laya](https://laya.convaiinnovations.com/) (Apache 2.0)
-are covered by their own licenses and are not part of this repository.
+Dependencies such as httpx, fastembed, PyTorch and [Laya](https://laya.convaiinnovations.com/)
+(Apache 2.0) are covered by their own licenses and are not part of this repository.

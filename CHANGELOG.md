@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- README: "Choosing a pre-filter" (none / embeddings / laya), shared self-tuning explained once, reader tips
+  (don't let the reader replace digest entries with the full article), settings reference complete.
 - **`PREFILTER=embeddings`:** a light local pre-filter with the existing sentence embeddings instead of Laya –
   compares articles with the topics in `interests.md`, your examples, stars and 👍/👎. Seconds instead of hours,
   ~200 MB instead of ~2.5 GB RAM; seats per topic, control sample and both learning paths work unchanged.
