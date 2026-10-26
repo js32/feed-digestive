@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- Seats per topic fixed: small topics are served first, and each topic's seats go to articles whose *main*
+  topic it is – before, tech articles that also touched e.g. philosophy used up those seats.
 - README: "Choosing a pre-filter" (none / embeddings / laya), shared self-tuning explained once, reader tips
   (don't let the reader replace digest entries with the full article), settings reference complete.
 - **`PREFILTER=embeddings`:** a light local pre-filter with the existing sentence embeddings instead of Laya –

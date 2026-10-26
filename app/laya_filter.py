@@ -219,20 +219,39 @@ def apply_prefilter(items: list[dict], flt: LayaFilter, keep: int, min_value: fl
     ranked = sorted(items, key=lambda it: -it["prefilter"])
     kept, ids = [], set()
 
-    def take(it):
+    def take(it) -> bool:
         if it["id"] not in ids and len(kept) < keep:
             kept.append(it)
             ids.add(it["id"])
+            return True
+        return False
 
     quota = 0
     if per_topic > 0:
-        for tid in flt.spec["topics"]:
-            key = f"topic_{tid}"
-            fits = [it for it in ranked if it["laya_features"].get(key, 0) >= 0.5 and it["prefilter"] >= min_value]
-            for it in sorted(fits, key=lambda it: -it["laya_features"][key] * it["prefilter"])[:per_topic]:
-                if it["id"] not in ids:
+        keys = [f"topic_{t}" for t in flt.spec["topics"]]
+
+        def primary(it):  # das Thema, zu dem der Artikel am stärksten passt
+            f = it["laya_features"]
+            k = max(keys, key=lambda k: f.get(k, 0.0))
+            return k if f.get(k, 0.0) >= 0.5 else None
+
+        # kleine Themen zuerst, damit große ihnen keine Plätze wegnehmen; jedes Thema bekommt
+        # bevorzugt Artikel, deren Hauptthema es ist – sonst füllen Technik-Artikel, die nebenbei
+        # auch "Philosophie" streifen, die Philosophie-Plätze
+        counts = {k: sum(1 for it in ranked if primary(it) == k) for k in keys}
+        for key in sorted(keys, key=lambda k: counts[k]):
+            fits = [it for it in ranked if it["laya_features"].get(key, 0) >= 0.5
+                    and it["prefilter"] >= min_value / 2]
+            fits.sort(key=lambda it: (primary(it) != key, -it["laya_features"][key] * it["prefilter"]))
+            got = 0
+            for it in fits:
+                if got >= per_topic:
+                    break
+                if it["id"] in ids:
+                    continue
+                if take(it) is not False:
                     quota += 1
-                take(it)
+                    got += 1
     for it in ranked:
         if it["prefilter"] >= min_value:
             take(it)
