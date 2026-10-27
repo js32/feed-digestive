@@ -175,7 +175,11 @@ class LLM:
             r = self.http.post(f"{self.base_url}/chat/completions", headers=headers, json=body)
         r.raise_for_status()
         data = r.json()
-        content = data["choices"][0]["message"]["content"] or ""
+        choice = data["choices"][0]
+        self._last_finish = choice.get("finish_reason")
+        if self._last_finish == "length":
+            log.warning("%s: Antwort bei max_tokens=%d abgeschnitten", self, max_tokens)
+        content = choice["message"]["content"] or ""
         if isinstance(content, list):  # Denk-Blöcke (type "thinking") verwerfen, nur die Antwort behalten
             content = "".join(c.get("text", "") for c in content
                               if isinstance(c, dict) and c.get("type") == "text")
@@ -187,10 +191,17 @@ class LLM:
         try:
             return extract_json(text)
         except ValueError:
-            log.warning("%s lieferte kein gültiges JSON, neuer Versuch", self)
-            text = self.complete(system, user + "\n\nAntworte AUSSCHLIESSLICH mit gültigem JSON.", max_tokens,
+            # häufigste Ursache: Antwort abgeschnitten (zu knappes max_tokens, v. a. bei Modellen, die erst
+            # "nachdenken") – deshalb beim zweiten Versuch deutlich mehr Platz lassen
+            log.warning("%s lieferte kein gültiges JSON (Anfang: %r), neuer Versuch mit mehr Platz",
+                        self, text[:120])
+            text = self.complete(system, user + "\n\nAntworte AUSSCHLIESSLICH mit gültigem JSON.", max_tokens * 3,
                                  json_mode=True, purpose=purpose)
-            return extract_json(text)
+            try:
+                return extract_json(text)
+            except ValueError:
+                log.warning("%s: auch der zweite Versuch ohne gültiges JSON (Anfang: %r)", self, text[:200])
+                raise
 
 
 def extract_json(text: str):

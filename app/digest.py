@@ -339,7 +339,7 @@ def group_by_topic(chosen: list[dict], llm: LLM, lang: str) -> list[dict]:
     listing = "\n".join(f"id: {n} – {it.get('digest_title') or it['title']} – {it.get('why') or ''}"
                         for n, it in enumerate(regular, 1))
     try:
-        result = llm.complete_json(TOPIC_SYSTEM.format(lang=lang), listing, max_tokens=500, purpose="Themen")
+        result = llm.complete_json(TOPIC_SYSTEM.format(lang=lang), listing, max_tokens=1500, purpose="Themen")
         topics = result.get("topics") or []
     except (LLMError, ValueError, AttributeError) as e:
         log.error("Themengruppen fehlgeschlagen, Digest bleibt ungruppiert: %s", e)

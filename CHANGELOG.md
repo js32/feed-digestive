@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- Topic grouping no longer fails on truncated answers: more room for the answer, a JSON retry with three times
+  the token budget, and the start of a broken answer plus truncation (`finish_reason=length`) in the log.
 - Seats per topic fixed: small topics are served first, and each topic's seats go to articles whose *main*
   topic it is – before, tech articles that also touched e.g. philosophy used up those seats.
 - README: "Choosing a pre-filter" (none / embeddings / laya), shared self-tuning explained once, reader tips
