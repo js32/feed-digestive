@@ -169,7 +169,8 @@ class LLM:
         r = self.http.post(f"{self.base_url}/chat/completions", headers=headers, json=body)
         if r.status_code in (400, 422) and "reasoning_effort" in body:
             # Modell kennt den Parameter nicht -> ohne ihn wiederholen und merken
-            log.info("%s: reasoning_effort nicht unterstützt, wird für dieses Modell weggelassen", self)
+            log.info("%s: reasoning_effort=%s abgelehnt, wird für dieses Modell weggelassen (Antwort: %s)",
+                     self, effort, r.text[:200])
             self._no_reasoning = True
             body.pop("reasoning_effort")
             r = self.http.post(f"{self.base_url}/chat/completions", headers=headers, json=body)

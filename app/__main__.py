@@ -251,10 +251,15 @@ def check(s: Settings) -> None:
             continue
         llm = LLM(prov, model)
         try:
-            answer = llm.complete("Antworte knapp.", "Sag nur: ok", max_tokens=20, purpose="Test")
+            # großzügig, sonst verbraucht ein "denkendes" Modell alles vorher und die Antwort bleibt leer
+            answer = llm.complete("Antworte knapp.", "Sag nur: ok", max_tokens=400, purpose="Test")
         except LLMError as e:
             raise SystemExit(f"✗ {stage}: {e}")
-        print(f"✓ {stage}: {llm} antwortet: {answer.strip()[:40]!r}")
+        if not answer.strip():
+            print(f"⚠ {stage}: {llm} antwortet leer – vermutlich ein Modell, das vor der Antwort nachdenkt und den "
+                  "Denkmodus nicht abschalten lässt. Das kostet Ausgabe-Token und kann Antworten abschneiden.")
+        else:
+            print(f"✓ {stage}: {llm} antwortet: {answer.strip()[:40]!r}")
     print(f"Feed-URL: {s.feed_url}")
 
 
