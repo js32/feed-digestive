@@ -1,6 +1,8 @@
 # Changelog
 
-## Unreleased
+## v1.1 – 2026-10-30
+
+Selection quality and learning: rare topics get through, the pre-filter tunes itself, 👍/👎 per article.
 
 - Topic grouping no longer fails on truncated answers: more room for the answer, a JSON retry with three times
   the token budget, and the start of a broken answer plus truncation (`finish_reason=length`) in the log.
@@ -8,7 +10,7 @@
   topic it is – before, tech articles that also touched e.g. philosophy used up those seats.
 - README: "Choosing a pre-filter" (none / embeddings / laya), shared self-tuning explained once, reader tips
   (don't let the reader replace digest entries with the full article), settings reference complete.
-- **`PREFILTER=embeddings`:** a light local pre-filter with the existing sentence embeddings instead of Laya –
+- **`PREFILTER=embeddings`** (new, not yet battle-tested): a light local pre-filter with the existing sentence embeddings instead of Laya –
   compares articles with the topics in `interests.md`, your examples, stars and 👍/👎. Seconds instead of hours,
   ~200 MB instead of ~2.5 GB RAM; seats per topic, control sample and both learning paths work unchanged.
 - **Topic variety (`MAX_PER_TOPIC=3`):** the scoring LLM also assigns each article a topic; at most 3 per topic
@@ -21,7 +23,6 @@
   learning and `laya-report` only use answers to the current catalogue.
 - Better default penalties: "news" covers war, attacks, disasters, crime and event dates; "promo" no
   longer hits articles about new products or models.
-
 - **👍 mehr davon / 👎 weniger davon** under each article (`VOTE_LINKS`, on by default). 👍 counts
   more than a star (2.0 vs 1.5), 👎 is an equally strong negative example; the latest vote wins.
 - **Weighted signals:** learning weights each example by its strongest signal – 👍 2.0, ★ 1.5, click 1.0,
