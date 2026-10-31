@@ -72,6 +72,8 @@ class LLM:
         default_timeout = 900 if provider in ("ollama", "custom") else 120
         timeout = timeout or float(os.environ.get("LLM_TIMEOUT", default_timeout))
         self.http = httpx.Client(timeout=timeout)
+        self._effort_lock = threading.Lock()
+        self._effort_chain: list[str] | None = None
         if provider == "anthropic":
             self.api_key = os.environ.get("ANTHROPIC_API_KEY", "")
             if not self.api_key:
@@ -164,22 +166,35 @@ class LLM:
         # Denkmodus steuern. Modelle kennen unterschiedliche Stufen: Mistral Small 4 / Medium 3.5 "none"|"high",
         # Mistral Large 4 nur "low"|"medium"|"high" (Standard high), Large 3 gar keine. Wird ein Wert abgelehnt,
         # geht es eine Stufe weiter (none -> low -> ohne Parameter); das Ergebnis merkt sich die Instanz.
-        wanted = os.environ.get("REASONING_EFFORT", "").strip()
-        if not hasattr(self, "_effort_chain"):
-            self._effort_chain = [e for e in ([wanted, "low"] if wanted == "none" else [wanted]) if e]
-        if self._effort_chain:
-            body["reasoning_effort"] = self._effort_chain[0]
-        r = self.http.post(f"{self.base_url}/chat/completions", headers=headers, json=body)
-        while r.status_code in (400, 422) and "reasoning_effort" in body:
-            rejected = self._effort_chain.pop(0)
+        # Mehrere Threads teilen sich eine Instanz (Auszüge laufen parallel) – daher Lock und nur den
+        # tatsächlich abgelehnten Wert entfernen, nie blind "den ersten".
+        with self._effort_lock:
+            if self._effort_chain is None:
+                wanted = os.environ.get("REASONING_EFFORT", "").strip()
+                self._effort_chain = [e for e in ([wanted, "low"] if wanted == "none" else [wanted]) if e]
             if self._effort_chain:
                 body["reasoning_effort"] = self._effort_chain[0]
-                log.info("%s: reasoning_effort=%s abgelehnt, versuche %s (Antwort: %s)",
-                         self, rejected, self._effort_chain[0], r.text[:200])
+        r = self.http.post(f"{self.base_url}/chat/completions", headers=headers, json=body)
+        while (r.status_code in (400, 422) and "reasoning_effort" in body
+               and "reasoning" in r.text.lower()):  # andere 400er normal als Fehler melden
+            rejected = body["reasoning_effort"]
+            with self._effort_lock:
+                if rejected in self._effort_chain:
+                    self._effort_chain.remove(rejected)
+                    first = True  # nur einmal loggen, nicht pro Thread
+                else:
+                    first = False
+                nxt = self._effort_chain[0] if self._effort_chain else None
+            if nxt:
+                body["reasoning_effort"] = nxt
+                if first:
+                    log.info("%s: reasoning_effort=%s abgelehnt, versuche %s (Antwort: %s)",
+                             self, rejected, nxt, r.text[:200])
             else:
                 body.pop("reasoning_effort")
-                log.info("%s: reasoning_effort=%s abgelehnt, wird für dieses Modell weggelassen (Antwort: %s)",
-                         self, rejected, r.text[:200])
+                if first:
+                    log.info("%s: reasoning_effort=%s abgelehnt, wird für dieses Modell weggelassen (Antwort: %s)",
+                             self, rejected, r.text[:200])
             r = self.http.post(f"{self.base_url}/chat/completions", headers=headers, json=body)
         r.raise_for_status()
         data = r.json()
