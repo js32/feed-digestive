@@ -551,7 +551,10 @@ def _run(s: Settings, dry_run: bool = False) -> dict | None:
         if emb and not dry_run:
             emb.save()
         if s.group_topics:
-            chosen = group_by_topic(chosen, summarizer, s.output_language)
+            # Gruppieren ist eine einfache Aufgabe – das (meist kleinere, nicht denkende) Bewertungsmodell
+            # reicht und spart die Denk-Token großer Modelle wie Mistral Large 4
+            grouper = LLM(s.scoring_provider, s.scoring_model) if s.scoring_provider != "none" else summarizer
+            chosen = group_by_topic(chosen, grouper, s.output_language)
 
         if not dry_run:
             # nur neu Bewertetes und Gezeigtes protokollieren – sonst wächst das Protokoll
