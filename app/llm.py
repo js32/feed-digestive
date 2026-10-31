@@ -26,6 +26,7 @@ class LLMError(RuntimeError):
 _throttle_lock = threading.Lock()
 _last_call: dict[str, float] = {}
 _learned: dict[str, float] = {}
+_learned_at: dict[str, float] = {}
 LEARNED_MAX = 65  # mehr als gut eine Minute Abstand braucht kein Tarif
 
 
@@ -33,10 +34,16 @@ def _learn_rate_limit(provider: str, retry_after: str) -> None:
     """Nach einem 429 den Abstand für diesen Anbieter erhöhen – für den Rest der Laufzeit."""
     with _throttle_lock:
         old = _learned.get(provider, 0.0)
+        now = time.monotonic()
+        # Parallele Anfragen bekommen oft gleichzeitig ein 429 – das ist EIN Engpass, nicht mehrere.
+        # Ohne Vorgabe des Anbieters daher nur verdoppeln, wenn seit der letzten Erhöhung Zeit vergangen ist.
+        if not retry_after.isdigit() and now - _learned_at.get(provider, -1e9) < max(old, 5.0):
+            return
         new = float(retry_after) if retry_after.isdigit() else old * 2 or 5.0
         new = min(LEARNED_MAX, max(old, new))
         if new > old:
             _learned[provider] = new
+            _learned_at[provider] = now
             log.info("%s: Rate-Limit erreicht, ab jetzt mindestens %.0fs zwischen zwei Anfragen", provider, new)
 
 
@@ -48,6 +55,7 @@ def reset_rate_limits() -> None:
             log.info("Gelernte Rate-Limits zurückgesetzt: %s",
                      ", ".join(f"{p} {v:.0f}s" for p, v in sorted(_learned.items())))
         _learned.clear()
+        _learned_at.clear()
 
 
 def _throttle(provider: str) -> None:
