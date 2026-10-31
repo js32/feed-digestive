@@ -442,7 +442,7 @@ The questions Laya asks are in `config/laya_questions.json`.
 | `OUTPUT_LANGUAGE` | `Deutsch` | Language of titles, excerpts and "why read", regardless of the article's language. |
 | `LLM_MIN_INTERVAL` | `0` | Fixed minimum seconds between two LLM calls. Usually not needed: after the first "too many requests" (HTTP 429) the app learns the required gap itself (from `Retry-After`, otherwise doubling from 5 s) and keeps it for the rest of the run. |
 | `SUMMARY_PARALLEL` | `4` | Excerpts written in parallel. `1` for rate-limited free tiers. |
-| `REASONING_EFFORT` | – | Sent as `reasoning_effort` to OpenAI-compatible APIs. `none` turns thinking off on hybrid models (Mistral Small 4, Medium 3.5), saving output tokens. Models that reject the parameter (e.g. Mistral Large 3) are retried once without it, so it is safe to set for both stages. Thinking blocks are always dropped from the answer. |
+| `REASONING_EFFORT` | – | Sent as `reasoning_effort` to OpenAI-compatible APIs to save output tokens. `none` turns thinking off where a model allows it (Mistral Small 4, Medium 3.5); if a model rejects `none`, `low` is tried next (Mistral Large 4 only knows low/medium/high, default high); models without the parameter (Mistral Large 3) get none. Thinking blocks are always dropped from the answer. |
 | `LLM_TIMEOUT` | `120` / `900` | Seconds per call. Default is 900 for `ollama` and `custom`, 120 for cloud APIs. |
 
 API keys and endpoints (only the ones for your provider are needed):

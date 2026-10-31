@@ -1,5 +1,11 @@
 # Changelog
 
+## Unreleased
+
+- `REASONING_EFFORT=none`: if a model rejects `none`, `low` is tried before the parameter is dropped – Mistral
+  Large 4 only knows low/medium/high and would otherwise think at full depth (its default). The provider's
+  reason is logged; `check` leaves room for thinking models and warns about empty answers.
+
 ## v1.1 – 2026-10-30
 
 Selection quality and learning: rare topics get through, the pre-filter tunes itself, 👍/👎 per article.

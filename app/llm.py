@@ -161,18 +161,25 @@ class LLM:
         # JSON-Modus: zwingt kleine lokale Modelle zu gültigem JSON
         if json_mode and self.provider in ("ollama", "openai", "mistral"):
             body["response_format"] = {"type": "json_object"}
-        # Denkmodus steuern (z. B. Mistral Small 4 / Medium 3.5: "none" oder "high").
-        # Nur senden, wenn gesetzt – Modelle ohne diesen Parameter lehnen ihn ab.
-        effort = os.environ.get("REASONING_EFFORT", "").strip()
-        if effort and not getattr(self, "_no_reasoning", False):
-            body["reasoning_effort"] = effort
+        # Denkmodus steuern. Modelle kennen unterschiedliche Stufen: Mistral Small 4 / Medium 3.5 "none"|"high",
+        # Mistral Large 4 nur "low"|"medium"|"high" (Standard high), Large 3 gar keine. Wird ein Wert abgelehnt,
+        # geht es eine Stufe weiter (none -> low -> ohne Parameter); das Ergebnis merkt sich die Instanz.
+        wanted = os.environ.get("REASONING_EFFORT", "").strip()
+        if not hasattr(self, "_effort_chain"):
+            self._effort_chain = [e for e in ([wanted, "low"] if wanted == "none" else [wanted]) if e]
+        if self._effort_chain:
+            body["reasoning_effort"] = self._effort_chain[0]
         r = self.http.post(f"{self.base_url}/chat/completions", headers=headers, json=body)
-        if r.status_code in (400, 422) and "reasoning_effort" in body:
-            # Modell kennt den Parameter nicht -> ohne ihn wiederholen und merken
-            log.info("%s: reasoning_effort=%s abgelehnt, wird für dieses Modell weggelassen (Antwort: %s)",
-                     self, effort, r.text[:200])
-            self._no_reasoning = True
-            body.pop("reasoning_effort")
+        while r.status_code in (400, 422) and "reasoning_effort" in body:
+            rejected = self._effort_chain.pop(0)
+            if self._effort_chain:
+                body["reasoning_effort"] = self._effort_chain[0]
+                log.info("%s: reasoning_effort=%s abgelehnt, versuche %s (Antwort: %s)",
+                         self, rejected, self._effort_chain[0], r.text[:200])
+            else:
+                body.pop("reasoning_effort")
+                log.info("%s: reasoning_effort=%s abgelehnt, wird für dieses Modell weggelassen (Antwort: %s)",
+                         self, rejected, r.text[:200])
             r = self.http.post(f"{self.base_url}/chat/completions", headers=headers, json=body)
         r.raise_for_status()
         data = r.json()
