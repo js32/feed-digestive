@@ -10,8 +10,8 @@
 - `check` reports Laya errors and frees the Laya model before the next tests.
 - Rate limit: several simultaneous HTTP 429 answers from parallel requests now raise the learned delay
   once instead of doubling it per answer (20 → 40 → 65 s within a millisecond).
-- Topic grouping now uses the scoring model instead of the summary model – a simple task that thinking
-  models like Large 4 otherwise spend their whole token budget on.
+- Topic grouping: clearer instructions for headings (a common rubric name, never a row of loose keywords).
+  Stays with the summary model – a small model (Mistral Small) wrote clumsy headings in a test.
 
 ## v1.1 – 2026-10-30
 

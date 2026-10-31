@@ -327,7 +327,7 @@ go in first; the free seats then go to other topics that score at least `MIN_SCO
 articles are marked with ↓ and "aufgefüllt"; `MIN_ITEMS=0` never tops up. `FEED_MODE=items` turns every
 article into its own feed entry instead of one daily digest.
 
-With `GROUP_TOPICS=true` (default) the scoring model sorts the selected articles into a few topic
+With `GROUP_TOPICS=true` (default) the summary model sorts the selected articles into a few topic
 sections in one short extra call (titles and "why read" only). Articles that fit no group go under
 "Weitere Themen"; in `FEED_MODE=items` the topic is set as the entry's category.
 
@@ -493,7 +493,7 @@ API keys and endpoints (only the ones for your provider are needed):
 | `MIN_ITEMS` | `5` | Minimum per digest: if fewer reach `MIN_SCORE`, the next best are added and marked as topped up. `0` never tops up. |
 | `MAX_PER_TOPIC` | `3` | At most this many articles per topic at first; free seats go to other topics scoring up to one point below `MIN_SCORE`, and only then to more articles of the strong topics. The topic comes from the LLM while scoring (from the Laya topic list), else from Laya. `0` = off. |
 | `FLOOR_SCORE` | `3` | Never top up with articles scoring below this; the digest gets shorter instead. |
-| `GROUP_TOPICS` | `true` | Sort the digest into topic sections (one extra short call to the scoring model). |
+| `GROUP_TOPICS` | `true` | Sort the digest into topic sections (one extra short call to the summary model). |
 | `EXPLORE_SLOTS` | `1` | Slots for a 🎲 random pick from just below the cut-off, against the filter bubble. `0` turns it off. |
 | `EXPLORE_MIN_REGULAR` | `4` | Only add the random pick once at least this many regular articles were selected. |
 
