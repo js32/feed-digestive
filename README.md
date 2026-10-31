@@ -49,7 +49,7 @@ feed reader ──► dedupe ──► local pre-filter ──► LLM scoring �
 - A reverse proxy with HTTPS (example config for nginx included) so your reader can fetch the feed
 - Disk and RAM depend on the pre-filter: with `PREFILTER=embeddings` ~250 MB RAM and ~0.5 GB disk;
   with `PREFILTER=laya` about 2–2.5 GB of free RAM during the nightly run and 1.5–3 GB of disk for
-  image and models
+  image and models. Little RAM to spare? See [Small servers](#small-servers-little-ram).
 
 ## Installation
 
@@ -250,6 +250,30 @@ turns every candidate into a vector, locally on the CPU in a few seconds. That g
 
 Vectors are cached in `data/embeddings-*.npz`, so articles seen on earlier runs are not recomputed.
 `python -m app check` shows how similar an English and a German version of the same headline are.
+
+### Small servers (little RAM)
+
+The digest container only needs real memory for the local models. If your server shares its RAM
+with other services (mail, analytics, password manager …), pick one of these levels – from
+lightest to heaviest:
+
+| Level | Settings | RAM during the run | Trade-off |
+|---|---|---|---|
+| **1. Everything via the API** | `PREFILTER=none`, `EMBEDDINGS=false`, build with `WITH_LAYA=0 WITH_EMBEDDINGS=0` | only the app itself | every candidate goes to the LLM: more tokens, and more of your reading goes to the provider. Keep `MAX_ENTRIES` low (e.g. 150) and use `SELECT_FROM=new`. |
+| **2. Embeddings** (recommended) | `PREFILTER=embeddings`, build with `WITH_LAYA=0` | ~250 MB | local pre-filter in seconds; also duplicate detection and "similar to your stars". |
+| **3. Laya, one model** | `PREFILTER=laya`, `LAYA_MODEL=multilingual`, `LAYA_BATCH_SIZE=2`, `LAYA_MAX_LEN=512` | lower end of 2–2.5 GB | Laya's question catalogue, but slow on small CPUs. |
+| **4. Laya, auto** | `PREFILTER=laya`, `LAYA_MODEL=auto` | 2–2.5 GB | `auto` uses the English checkpoint for English articles and the multilingual one for the rest. Articles are grouped by language so it switches models at most once per run, but switching costs time and the run needs room for the larger checkpoint. Only worth it if most of your feeds are English and you have RAM to spare. |
+
+Tips:
+- `WITH_LAYA=0` makes the image about 1 GB smaller (no PyTorch) – useful when the disk is tight too.
+  Changing `WITH_*` needs `docker compose build`.
+- `DIGEST_MEM_LIMIT` (default `3g`) protects the other services: if the digest hits the limit, only
+  the digest is stopped. With level 1 or 2, `1g` is plenty.
+- If a run or `check` ends without an error message, the kernel probably stopped it for lack of
+  memory. `docker compose exec digest python -m app check; echo "Exit: $?"` – exit code `137` and an
+  entry in `dmesg | grep -i oom` confirm it. Go one level lighter, or add swap.
+- Excerpts, scoring and topic grouping always run at the provider, so they need no local RAM – a
+  large summary model costs money, not memory.
 
 ### Fully local with Ollama
 

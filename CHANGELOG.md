@@ -6,6 +6,8 @@
   Large 4 only knows low/medium/high and would otherwise think at full depth (its default). The provider's
   reason is logged; `check` leaves room for thinking models and warns about empty answers.
 - Fix: the reasoning fallback crashed (`IndexError`) when several excerpts were written in parallel.
+- README: "Small servers (little RAM)" – four levels from "everything via the API" to Laya `auto`.
+- `check` reports Laya errors and frees the Laya model before the next tests.
 - Topic grouping now uses the scoring model instead of the summary model – a simple task that thinking
   models like Large 4 otherwise spend their whole token budget on.
 
