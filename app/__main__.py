@@ -223,8 +223,17 @@ def check(s: Settings) -> None:
                          max_len=s.laya_max_len, batch_size=s.laya_batch_size)
         probe = {"feed": "Test", "title": "New open-weight language model beats GPT on coding benchmarks",
                  "text": "Researchers released a new open-weight LLM that outperforms larger models on coding tasks."}
-        flt.score([probe])
-        print(f"✓ Laya ({s.laya_model}): Testartikel bekommt {probe['prefilter']}/10 – {probe['prefilter_why']}")
+        try:
+            flt.score([probe])
+        except Exception as e:  # sonst endet check ohne Erklärung
+            raise SystemExit(f"✗ Laya ({s.laya_model}): {type(e).__name__}: {e}")
+        print(f"✓ Laya ({s.laya_model}): Testartikel bekommt {probe.get('prefilter')}/10 – "
+              f"{probe.get('prefilter_why', '')}", flush=True)
+        # Laya-Modell (1–2,5 GB) freigeben, bevor Embeddings und LLM-Test laufen – sonst droht auf
+        # kleinen Servern der OOM-Killer, und check bricht kommentarlos ab
+        del flt
+        import gc
+        gc.collect()
     if s.prefilter == "embeddings":
         from .embed_filter import EmbedFilter
         flt = EmbedFilter(s)
