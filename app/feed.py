@@ -29,7 +29,8 @@ def _link(it: dict, s: Settings | None) -> str:
     if s is not None and s.track_clicks and it.get("entry_id"):
         from .feedback import tracked_url
         return tracked_url(s.feed_base, it["entry_id"])
-    return it.get("url") or ""
+    from .feedback import safe_url
+    return safe_url(it.get("url"))
 
 
 def _item_html(it: dict, with_header: bool = True, s: Settings | None = None) -> str:

@@ -321,7 +321,8 @@ def snapshot(s: Settings) -> dict:
         "history": [{k: r.get(k) for k in ("started", "ended", "seconds", "ok", "error", "source", "stats")}
                     for r in history[-14:]],
         "scores": {**scores, "days": SCORE_DAYS, "near_days": NEAR_MISS_DAYS,
-                   "min_score": s.min_score, "floor_score": s.floor_score},
+                   "min_score": s.min_score, "floor_score": s.floor_score,
+                   "top_n": s.top_n, "max_per_topic": s.max_per_topic},
         "last_run_saved": state.get("last_run"),
         "next_run": next_run.isoformat() if next_run else None,
         "feed_updated": (datetime.fromtimestamp(feed_file.stat().st_mtime, timezone.utc).isoformat()

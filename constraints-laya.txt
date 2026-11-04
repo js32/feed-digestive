@@ -1,0 +1,11 @@
+# Feste Versionen für Laya und seine Abhängigkeiten (nur mit WITH_LAYA=1).
+# Ohne diese Datei zieht jeder Neubau die neueste PyTorch-/transformers-Version – und die kann
+# sich anders verhalten oder Laya brechen. Aktualisieren: im laufenden Container nachsehen, was
+# funktioniert, und hier eintragen:
+#   docker compose exec digest pip freeze | grep -iE "^(torch|transformers|safetensors|huggingface.hub|numpy|tokenizers)=="
+# Stand 2026-11-04, so im Einsatz getestet:
+torch==2.15.0
+transformers==5.22.1
+safetensors==0.8.0
+huggingface_hub==1.33.0
+numpy==2.5.4

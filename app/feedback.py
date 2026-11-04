@@ -17,7 +17,7 @@ log = logging.getLogger(__name__)
 _write_lock = threading.Lock()
 
 # Abrufe, die kein Mensch sind: Miniflux-Crawler, Link-Vorschauen, Skripte
-BOT_RE = re.compile(r"miniflux|bot|crawl|spider|preview|curl|wget|python|httpx|feedparser|fetch|okhttp|go-http",
+BOT_RE = re.compile(r"miniflux|bot|crawl|spider|preview|externalhit|whatsapp|curl|wget|python|httpx|feedparser|fetch|okhttp|go-http",
                     re.I)
 TRACK_RE = re.compile(r"/r/([A-Za-z0-9_-]+)(?:$|[?#])")
 ID_RE = re.compile(r"^[A-Za-z0-9_-]{1,64}$")
@@ -121,8 +121,24 @@ def pixel_url(feed_base: str, entry_id) -> str:
     return f"{feed_base}/p/{entry_id}.gif"
 
 
-def is_human(user_agent: str | None) -> bool:
+def is_human(user_agent: str | None, headers=None) -> bool:
+    """Kein Bot und kein Vorab-Laden: Browser und Link-Vorschauen holen Links teils schon, bevor jemand
+    tippt, und kennzeichnen das mit "Sec-Purpose: prefetch" bzw. "Purpose: prefetch"."""
+    if headers is not None:
+        purpose = f"{headers.get('Sec-Purpose', '')} {headers.get('Purpose', '')} {headers.get('X-Moz', '')}"
+        if "prefetch" in purpose.lower() or "prerender" in purpose.lower():
+            return False
     return bool(user_agent) and not BOT_RE.search(user_agent)
+
+
+_SAFE_URL = re.compile(r"^https?://[^\x00-\x1f\x7f]+$", re.I)
+
+
+def safe_url(url: str | None) -> str:
+    """Nur http(s)-Links ohne Steuerzeichen – ein Feed könnte sonst javascript:- oder data:-Links
+    unterschieben, und Zeilenumbrüche würden im Location-Header Unfug anrichten."""
+    url = (url or "").strip()
+    return url if _SAFE_URL.match(url) else ""
 
 
 def record_click(data_dir: Path, entry_id: str, day_only: bool = False) -> None:
@@ -154,10 +170,10 @@ def lookup_url(data_dir: Path, entry_id: str) -> str | None:
     for d in digests:
         for it in d.get("items", []):
             if str(it.get("entry_id")) == entry_id:
-                return it.get("url")
+                return safe_url(it.get("url")) or None
     for r in reversed(read_jsonl(data_dir / "history.jsonl")):
         if str(r.get("entry_id")) == entry_id and r.get("shown"):
-            return r.get("url")
+            return safe_url(r.get("url")) or None
     return None
 
 

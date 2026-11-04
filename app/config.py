@@ -7,9 +7,25 @@ from dataclasses import dataclass, field
 from pathlib import Path
 
 
+# PRESET=… setzt mehrere Standardwerte auf einmal. Was einzeln in der .env steht, gilt weiterhin –
+# ein Profil ändert nur, was du nicht selbst eingetragen hast. Die Build-Optionen (WITH_LAYA,
+# DIGEST_MEM_LIMIT) liest Docker Compose, die stehen im README zu jedem Profil.
+PRESETS: dict[str, dict[str, str]] = {
+    # wenig RAM: leichter lokaler Vorfilter statt Laya (~250 MB statt 2–2,5 GB)
+    "small-server": {"PREFILTER": "embeddings", "EMBEDDINGS": "true"},
+    # Laya mit einem Modell für alle Sprachen – schneller und sparsamer als auto
+    "laya": {"PREFILTER": "laya", "LAYA_MODEL": "multilingual", "EMBEDDINGS": "true"},
+    # gar keine lokalen Modelle: alles bewertet der Anbieter, dafür weniger Kandidaten
+    "api-only": {"PREFILTER": "none", "EMBEDDINGS": "false", "MAX_ENTRIES": "150", "SELECT_FROM": "new"},
+}
+_preset: dict[str, str] = {}
+
+
 def _env(name: str, default: str | None = None) -> str | None:
     v = os.environ.get(name)
-    return v.strip() if v is not None and v.strip() != "" else default
+    if v is not None and v.strip() != "":
+        return v.strip()
+    return _preset.get(name, default)
 
 
 def _int(name: str, default: int) -> int:
@@ -93,6 +109,7 @@ class Settings:
     examples_in_prompt: int = 120
     summary_profile: str = "full"
     privacy: str = "standard"
+    preset: str = ""
 
     # Auswahl / Ausgabe
     top_n: int = 10
@@ -132,6 +149,20 @@ class Settings:
 
     @classmethod
     def from_env(cls) -> "Settings":
+        global _preset
+        name = (os.environ.get("PRESET") or "").strip().lower()
+        if name and name not in PRESETS:
+            raise SystemExit(f"PRESET={name!r} kenne ich nicht – möglich: {', '.join(PRESETS)} (oder leer lassen)")
+        _preset = PRESETS.get(name, {})
+        try:
+            s = cls._from_env()
+        finally:
+            _preset = {}
+        s.preset = name
+        return s
+
+    @classmethod
+    def _from_env(cls) -> "Settings":
         # PRIVACY=strict ändert nur Standardwerte – was in der .env einzeln steht, gilt weiterhin
         privacy = (_env("PRIVACY", "standard") or "standard").lower()
         strict = privacy == "strict"

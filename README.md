@@ -105,6 +105,15 @@ The first `check` downloads the local models into `data/` (embeddings ~220 MB, L
 (e.g. `certbot --nginx -d your.domain`) and reload nginx. Only the feed, the click redirects, the 👍/👎 links
 are passed through, plus the status page (see below); everything else returns 404.
 
+The status page shows what you read, click and like, so the example protects it with a password
+on top of the secret path (the feed URL travels further than you'd think). Create the password file
+once – you'll be asked for the password:
+
+```bash
+printf "digest:$(openssl passwd -apr1)\n" | sudo tee /etc/nginx/feed-digestive.htpasswd
+sudo nginx -t && sudo systemctl reload nginx
+```
+
 **Subscribe** to `https://your.domain/<FEED_TOKEN>/feed.xml` in your reader. The digest feed
 itself is automatically excluded from the next digest.
 
@@ -259,10 +268,15 @@ lightest to heaviest:
 
 | Level | Settings | RAM during the run | Trade-off |
 |---|---|---|---|
-| **1. Everything via the API** | `PREFILTER=none`, `EMBEDDINGS=false`, build with `WITH_LAYA=0 WITH_EMBEDDINGS=0` | only the app itself | every candidate goes to the LLM: more tokens, and more of your reading goes to the provider. Keep `MAX_ENTRIES` low (e.g. 150) and use `SELECT_FROM=new`. |
-| **2. Embeddings** (recommended) | `PREFILTER=embeddings`, build with `WITH_LAYA=0` | ~250 MB | local pre-filter in seconds; also duplicate detection and "similar to your stars". |
-| **3. Laya, one model** | `PREFILTER=laya`, `LAYA_MODEL=multilingual`, `LAYA_BATCH_SIZE=2`, `LAYA_MAX_LEN=512` | lower end of 2–2.5 GB | Laya's question catalogue, but slow on small CPUs. |
+| **1. Everything via the API** | `PRESET=api-only`, build with `WITH_LAYA=0 WITH_EMBEDDINGS=0` | only the app itself | every candidate goes to the LLM: more tokens, and more of your reading goes to the provider. Keep `MAX_ENTRIES` low (e.g. 150) and use `SELECT_FROM=new`. |
+| **2. Embeddings** (recommended) | `PRESET=small-server`, build with `WITH_LAYA=0` | ~250 MB | local pre-filter in seconds; also duplicate detection and "similar to your stars". |
+| **3. Laya, one model** | `PRESET=laya`, optionally `LAYA_BATCH_SIZE=2`, `LAYA_MAX_LEN=512` | lower end of 2–2.5 GB | Laya's question catalogue, but slow on small CPUs. |
 | **4. Laya, auto** | `PREFILTER=laya`, `LAYA_MODEL=auto` | 2–2.5 GB | `auto` uses the English checkpoint for English articles and the multilingual one for the rest. Articles are grouped by language so it switches models at most once per run, but switching costs time and the run needs room for the larger checkpoint. Only worth it if most of your feeds are English and you have RAM to spare. |
+
+A `PRESET` only fills in defaults – anything you set yourself in `.env` still wins. `api-only` sets
+`PREFILTER=none`, `EMBEDDINGS=false`, `MAX_ENTRIES=150`, `SELECT_FROM=new`; `small-server` sets
+`PREFILTER=embeddings`, `EMBEDDINGS=true`; `laya` sets `PREFILTER=laya`, `LAYA_MODEL=multilingual`,
+`EMBEDDINGS=true`. `check` and the log at start-up show the active profile.
 
 Tips:
 - `WITH_LAYA=0` makes the image about 1 GB smaller (no PyTorch) – useful when the disk is tight too.
@@ -389,6 +403,10 @@ Data is kept in `data/history.jsonl` and `data/feedback.jsonl` for 180 days. Set
 All settings go into `.env`. Docker Compose also reads that file for the container
 settings at the end of this list. Changes to `.env` take effect after `docker compose up -d`.
 Files in `config/` are re-read on every run and need no restart.
+
+| Setting | Default | Description |
+|---|---|---|
+| `PRESET` | – | Fill in several defaults at once: `small-server`, `laya` or `api-only` (see [Small servers](#small-servers-little-ram)). Settings you set yourself still win. |
 
 ### Source
 
@@ -539,7 +557,7 @@ don't touch.
 
 | Setting | Default | Description |
 |---|---|---|
-| `WITH_LAYA` | `1` | Build the image with Laya (PyTorch CPU, ~1 GB larger). `0` for a slim image if you use `PREFILTER=embeddings` or `none`. Needs `docker compose build`. |
+| `WITH_LAYA` | `1` | Build the image with Laya (PyTorch CPU, ~1 GB larger). `0` for a slim image if you use `PREFILTER=embeddings` or `none`. Needs `docker compose build`. Versions of PyTorch, transformers & co. are pinned in `constraints-laya.txt`, so a rebuild doesn't silently pull a new PyTorch. |
 | `WITH_EMBEDDINGS` | `1` | Build the image with fastembed (~200 MB), needed for `PREFILTER=embeddings` and `EMBEDDINGS=true`. |
 | `DIGEST_MEM_LIMIT` | `3g` | Memory limit for the digest container. |
 | `DIGEST_CPUS` | `2` | CPU limit for the digest container. |
@@ -561,9 +579,13 @@ don't touch.
 | `docker compose exec digest python -m app opens-report [days]` | evaluate the `OPEN_PIXEL` measurement: does your reader load the image only when you open an entry? |
 | `docker compose exec digest python -m app laya-report` | evaluate each Laya question against LLM scores, clicks and stars (hit rate, correlation, overlaps, disagreements) |
 | `docker compose exec digest python -m app laya-questions` | write a Laya question catalogue from `interests.md` (never overwrites an existing one) |
+| `sh deploy/update.sh` | update safely: `git pull`, build the new image while the old container keeps working, wait until no digest is running, then restart |
 
-**Status page:** `https://your.domain/<FEED_TOKEN>/status`, like the feed only reachable via the
-secret path. It shows:
+`learn`, `privacy-report`, `opens-report` and `laya-report` are also on the status page under
+**Berichte** – easier to read and copy on a phone than a long terminal output.
+
+**Status page:** `https://your.domain/<FEED_TOKEN>/status`, reachable via the secret path and, with
+the example nginx config, a password (see Installation). It shows:
 
 - whether a run is in progress, in which stage and why it waits (e.g. a provider's rate limit); the
   browser tab title and icon show the state too
@@ -584,8 +606,8 @@ Scheduled runs and runs started with `docker compose exec … run` both show up;
 `data/status/` and survive restarts. Both kinds of run share a lock, so a manual run never
 overlaps with the scheduled one.
 
-If you set up nginx before this page existed, add the `/status` location from
-`deploy/nginx.conf.example`. To keep the page private instead, leave nginx alone and open it
+If you set up nginx before this page existed or before it had a password, take the `/status`
+location from `deploy/nginx.conf.example` and create the password file as shown under Installation. To keep the page private instead, leave nginx alone and open it
 through an SSH tunnel: `ssh -N -L 8087:127.0.0.1:8087 user@server`, then
 `http://localhost:8087/<FEED_TOKEN>/status`.
 
@@ -613,6 +635,18 @@ memory/CPU limits (`DIGEST_MEM_LIMIT`, `DIGEST_CPUS`).
   tokens on hybrid models.
 - The feed URL contains a secret token. Anyone with the URL can read your digest, so treat it
   like a password.
+
+## Development
+
+```bash
+pip install -r requirements.txt -r requirements-dev.txt
+python -m pytest tests
+```
+
+The tests need neither Laya nor embeddings nor network access, and run on every push (GitHub
+Actions). They cover the LLM client (thinking-mode fallback, also in parallel; rate limits; JSON
+repair), selection, feed escaping, settings and presets, and the web server (secret path, no open
+redirect, votes only from people, reports only from a fixed list).
 
 ## Roadmap
 

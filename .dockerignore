@@ -1,0 +1,9 @@
+# Nur requirements, constraints und app/ landen im Image. Alles andere bleibt draußen –
+# vor allem data/ (Modelle, mehrere GB) und die privaten Dateien.
+*
+!requirements.txt
+!constraints-laya.txt
+!app/
+!app/**
+app/__pycache__/
+app/**/__pycache__/

@@ -203,6 +203,12 @@ button.badge[aria-expanded="true"] .chev { transform: rotate(180deg); }
 .threshold.floor { border-left: 1px dotted var(--text-3); }
 .threshold.floor span { font-weight: 400; color: var(--text-3); }
 .xaxis { display: grid; grid-template-columns: repeat(11, minmax(0, 1fr)); gap: 4px; margin-top: 6px; font-size: 11px; color: var(--text-3); text-align: center; }
+.report-tabs { display: flex; flex-wrap: wrap; gap: 8px; }
+.report-tabs .btn[aria-pressed="true"] { background: var(--brand); color: #fff; }
+.report-meta { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-top: 12px; }
+.report-note { margin: 0; color: var(--text-3); font-size: 13px; }
+#report-out { margin: 12px 0 0; padding: 14px 16px; border-radius: 8px; background: var(--gray-bg); max-height: 70vh;
+  overflow: auto; white-space: pre-wrap; word-break: break-word; font: 12px/1.5 ui-monospace, SFMono-Regular, Menlo, monospace; }
 .callout { display: flex; gap: 10px; margin-top: 16px; padding: 12px 14px; border-radius: 8px; background: var(--brand-soft); color: var(--text-2); font-size: 13px; }
 .callout svg { color: var(--brand); margin-top: 2px; }
 details.raw { margin-top: 12px; font-size: 13px; }
@@ -404,6 +410,26 @@ details.raw .tbl th, details.raw .tbl td { padding-left: 0; padding-right: 16px;
       </section>
     </div>
   </div>
+
+  <section class="card" id="reports" aria-labelledby="reports-h">
+    <div class="card-head">
+      <h2 id="reports-h">Berichte</h2>
+      <p>Dieselben Auswertungen wie auf der Kommandozeile – hier zum Lesen und Kopieren auf dem Handy.</p>
+    </div>
+    <div class="card-body">
+      <div class="report-tabs" role="group" aria-label="Bericht">
+        <button type="button" class="btn" data-report="learn" title="python -m app learn">Gelernt</button>
+        <button type="button" class="btn" data-report="laya" title="python -m app laya-report">Laya-Fragen</button>
+        <button type="button" class="btn" data-report="privacy" title="python -m app privacy-report">Datenschutz</button>
+        <button type="button" class="btn" data-report="opens" title="python -m app opens-report">Öffnungen</button>
+      </div>
+      <div class="report-meta">
+        <p id="report-note" class="report-note">Einen Bericht wählen. Er wird beim Antippen neu berechnet (dauert ein paar Sekunden).</p>
+        <button type="button" class="btn" id="report-copy" hidden>Kopieren</button>
+      </div>
+      <pre id="report-out" hidden></pre>
+    </div>
+  </section>
 
   <section class="card" id="logs" aria-labelledby="logs-h">
     <div class="card-head">
@@ -822,9 +848,20 @@ function renderScores() {
   hint.replaceChildren();
   hint.hidden = !sc.count;
   if (sc.count) {
-    const above = sc.buckets.filter((b) => b.score >= sc.min_score).reduce((n, b) => n + b.total, 0);
-    hint.append(icon("info"), el("span", "", `${above} Artikel lagen auf oder über MIN_SCORE ${sc.min_score}.`
-      + (below && below.total ? ` ${below.total} weitere liegen bei ${sc.min_score - 1}, knapp darunter; mit MIN_SCORE=${sc.min_score - 1} kämen sie in Frage.` : "")));
+    const aboveB = sc.buckets.filter((b) => b.score >= sc.min_score);
+    const above = aboveB.reduce((n, b) => n + b.total, 0);
+    const waiting = aboveB.reduce((n, b) => n + b.total - b.shown, 0);
+    let text = `${above} Artikel lagen auf oder über MIN_SCORE ${sc.min_score}.`;
+    if (waiting > 0) {
+      // Genug gute Artikel da – begrenzt hat die Platzzahl, nicht die Schwelle
+      text += ` ${waiting} davon kamen (noch) nicht in den Digest: begrenzt haben die Plätze – höchstens`
+        + ` ${sc.top_n} pro Digest (ARTICLES), 3 pro Feed` + (sc.max_per_topic ? `, ${sc.max_per_topic} pro Thema (MAX_PER_TOPIC)` : "")
+        + `. Ein niedrigerer MIN_SCORE bringt dann nichts; mehr Artikel gibt es nur mit mehr Plätzen.`;
+    } else if (below && below.total) {
+      text += ` Alle davon kamen in den Digest. ${below.total} weitere liegen bei ${sc.min_score - 1}, knapp darunter;`
+        + ` mit MIN_SCORE=${sc.min_score - 1} kämen sie in Frage.`;
+    }
+    hint.append(icon("info"), el("span", "", text));
   }
 }
 
@@ -951,6 +988,32 @@ async function pollStatus() {
   clearTimeout(statusTimer);
   statusTimer = setTimeout(pollStatus, status && status.running ? 4000 : 15000);
 }
+
+// ---------- Berichte ----------
+let reportText = "";
+document.querySelectorAll(".report-tabs [data-report]").forEach((b) => b.addEventListener("click", async () => {
+  const out = $("report-out"), note = $("report-note"), copy = $("report-copy");
+  document.querySelectorAll(".report-tabs [data-report]").forEach((x) => x.setAttribute("aria-pressed", x === b));
+  document.querySelectorAll(".report-tabs [data-report]").forEach((x) => { x.disabled = true; });
+  note.textContent = `${b.textContent}: wird berechnet …`;
+  try {
+    const r = await fetch(`${base}/report/${b.dataset.report}`, { cache: "no-store" });
+    reportText = await r.text();
+    out.textContent = reportText;
+    out.hidden = false;
+    copy.hidden = !navigator.clipboard;
+    note.textContent = r.ok ? `${b.textContent} – Stand ${new Date().toLocaleTimeString("de-DE")}` : `${b.textContent}: Fehler ${r.status}`;
+  } catch (e) {
+    note.textContent = `${b.textContent}: nicht erreichbar (${e})`;
+  } finally {
+    document.querySelectorAll(".report-tabs [data-report]").forEach((x) => { x.disabled = false; });
+  }
+}));
+$("report-copy").addEventListener("click", async () => {
+  try { await navigator.clipboard.writeText(reportText); $("report-copy").textContent = "Kopiert ✓"; }
+  catch { $("report-copy").textContent = "Kopieren nicht möglich"; }
+  setTimeout(() => { $("report-copy").textContent = "Kopieren"; }, 2000);
+});
 
 document.querySelectorAll(".btn-group button").forEach((b) => b.addEventListener("click", () => {
   level = b.dataset.level;

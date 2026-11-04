@@ -57,7 +57,7 @@ def parse_interests(text: str) -> tuple[dict, list[str]]:
             if negative:
                 negatives.append(clean)
             elif weight is not None:
-                label = re.split(r"[:(]", clean, 1)[0].strip()[:40] or clean[:40]
+                label = re.split(r"[:(]", clean, maxsplit=1)[0].strip()[:40] or clean[:40]
                 tid = _slug(label)
                 while tid in topics:
                     tid += "_"

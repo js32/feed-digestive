@@ -2,6 +2,33 @@
 
 ## Unreleased
 
+**Security and privacy**
+- Status page behind a password: the nginx example adds Basic Auth on top of the secret path – the page shows
+  what you read, click and like, and the feed URL travels further than you'd think. README shows how to create
+  the password file.
+- Fix in the nginx example: the location for clicks and 👍/👎 needs quotes (the regex contains `{…}`) – without
+  them nginx refused to load the config.
+- Only `http(s)` links from feeds are used; `javascript:`/`data:` links and control characters are dropped
+  before they reach the feed or a redirect.
+- Votes and clicks no longer count when a browser or link preview loads the link ahead of time
+  (`Sec-Purpose: prefetch`), and link-preview fetchers like WhatsApp or `facebookexternalhit` count as bots.
+- `.dockerignore`: the build context no longer includes `data/` (models, several GB), `.env` or `config/`.
+- Laya dependencies pinned in `constraints-laya.txt` (PyTorch 2.15.0, transformers 5.22.1 …).
+
+**Operation**
+- `deploy/update.sh`: `git pull`, build while the old container keeps working, wait until no digest is running,
+  then restart – a rebuild no longer kills a run.
+- **Reports on the status page:** `learn`, `laya-report`, `privacy-report`, `opens-report` with one tap, with a
+  copy button – no more copying long terminal output on a phone.
+- Status page: the hint below the score chart no longer suggests a lower `MIN_SCORE` when the limit was the
+  number of places (per digest, per feed, per topic).
+- **`PRESET=small-server | laya | api-only`** fills in the matching defaults; anything set explicitly still wins.
+  `.env.example` now starts with `PRESET=small-server`.
+
+**Development**
+- Tests (`python -m pytest tests`, 69 tests, no models or network) and a GitHub Action running them on every push.
+
+**LLM and selection**
 - `REASONING_EFFORT=none`: if a model rejects `none`, `low` is tried before the parameter is dropped – Mistral
   Large 4 only knows low/medium/high and would otherwise think at full depth (its default). The provider's
   reason is logged; `check` leaves room for thinking models and warns about empty answers.

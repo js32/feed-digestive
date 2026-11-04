@@ -15,12 +15,14 @@ from __future__ import annotations
 import json
 import logging
 import re
+import subprocess
 import sys
 
 import httpx
 import threading
 import time
 from datetime import datetime, timedelta
+from pathlib import Path
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from zoneinfo import ZoneInfo
 
@@ -77,6 +79,28 @@ def _next_run(s: Settings) -> datetime:
 
 
 # 1×1 transparentes GIF
+# Berichte, die die Status-Seite anzeigen kann: Name in der URL -> Befehl. Feste Liste, keine Eingaben
+# aus der Anfrage landen in der Kommandozeile.
+REPORTS = {"learn": ["learn"], "laya": ["laya-report"], "privacy": ["privacy-report"], "opens": ["opens-report"]}
+_report_lock = threading.Lock()
+
+
+def _report_text(name: str) -> tuple[int, str]:
+    """Bericht in eigenem Prozess erzeugen – so stört er weder Webserver noch einen laufenden Digest."""
+    if not _report_lock.acquire(blocking=False):
+        return 429, "Es wird gerade schon ein Bericht erstellt – bitte gleich noch einmal."
+    try:
+        r = subprocess.run([sys.executable, "-m", "app", *REPORTS[name]], capture_output=True, text=True,
+                           timeout=180, cwd=str(Path(__file__).resolve().parent.parent))
+        if r.returncode != 0:
+            return 500, (r.stdout + "\n" + r.stderr[-2000:]).strip()
+        return 200, r.stdout.strip() or "(keine Ausgabe)"
+    except subprocess.TimeoutExpired:
+        return 504, "Der Bericht hat länger als 3 Minuten gebraucht und wurde abgebrochen."
+    finally:
+        _report_lock.release()
+
+
 PIXEL = (b"GIF89a\x01\x00\x01\x00\x80\x00\x00\x00\x00\x00\x00\x00\x00!\xf9\x04\x01\x00\x00\x00\x00"
          b",\x00\x00\x00\x00\x01\x00\x01\x00\x00\x02\x02D\x01\x00;")
 
@@ -107,6 +131,11 @@ def _make_handler(s: Settings):
                 return self._json(status.snapshot(s))
             if path == status_path + "/health":
                 return self._json(status.health(s, force="force=1" in query))
+            if path.startswith(status_path + "/report/") and self.command == "GET":
+                name = path.removeprefix(status_path + "/report/")
+                if name in REPORTS:
+                    code, text = _report_text(name)
+                    return self._send(code, text.encode(), "text/plain; charset=utf-8", cache=False)
             if path == status_path + "/logs":
                 q = dict(re.findall(r"(?:^|&)(after|gen)=(\d+)", query))
                 return self._json(status.read_log(s.data_dir, int(q.get("after", 0)), int(q.get("gen", 0))))
@@ -125,7 +154,7 @@ def _make_handler(s: Settings):
                 target = feedback.lookup_url(s.data_dir, entry_id)
                 if not target:
                     return self._send(404, b"unbekannter Artikel", "text/plain; charset=utf-8")
-                if self.command == "GET" and feedback.is_human(self.headers.get("User-Agent")):
+                if self.command == "GET" and feedback.is_human(self.headers.get("User-Agent"), self.headers):
                     feedback.record_click(s.data_dir, entry_id, day_only=s.privacy == "strict")
                 return self._redirect(target)
             return self._send(404, b"not found", "text/plain")
@@ -138,7 +167,7 @@ def _make_handler(s: Settings):
             if not target:
                 return self._send(404, b"unbekannter Artikel", "text/plain; charset=utf-8")
             title = feedback.lookup_title(s.data_dir, entry_id) or target
-            if self.command == "GET" and feedback.is_human(self.headers.get("User-Agent")):
+            if self.command == "GET" and feedback.is_human(self.headers.get("User-Agent"), self.headers):
                 feedback.record_vote(s.data_dir, entry_id, kind, day_only=s.privacy == "strict")
             other = "down" if kind == "up" else "up"
             text = "👍 Notiert: mehr davon." if kind == "up" else "👎 Notiert: weniger davon."
@@ -192,6 +221,8 @@ def serve(s: Settings) -> None:
     httpd = ThreadingHTTPServer(("0.0.0.0", s.http_port), _make_handler(s))
     threading.Thread(target=httpd.serve_forever, daemon=True).start()
     log.info("Feed erreichbar unter %s (intern Port %d)", s.feed_url, s.http_port)
+    if s.preset:
+        log.info("Profil PRESET=%s: Vorfilter %s, Embeddings %s", s.preset, s.prefilter, "an" if s.embeddings else "aus")
     log.info("Status-Seite: %s/status", s.feed_base)
     if s.star_poll_minutes > 0 and (s.use_starred or s.learn):
         threading.Thread(target=_poll_stars, args=(s,), daemon=True).start()
@@ -208,6 +239,8 @@ def serve(s: Settings) -> None:
 
 
 def check(s: Settings) -> None:
+    if s.preset:
+        print(f"Profil PRESET={s.preset}: Vorfilter {s.prefilter}, Embeddings {'an' if s.embeddings else 'aus'}")
     src = make_source(s)
     target = s.greader_url if s.source == "greader" else s.miniflux_url
     try:

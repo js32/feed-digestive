@@ -20,6 +20,7 @@ from urllib.parse import quote
 
 import httpx
 
+from .feedback import safe_url
 from .miniflux import Miniflux, html_to_text
 
 log = logging.getLogger(__name__)
@@ -71,7 +72,7 @@ class MinifluxSource(Source):
     def _norm(e: dict) -> dict:
         feed = e.get("feed") or {}
         return {
-            "id": str(e["id"]), "title": e.get("title") or "", "url": e.get("url") or "",
+            "id": str(e["id"]), "title": e.get("title") or "", "url": safe_url(e.get("url")),
             "content": e.get("content") or "", "feed_title": feed.get("title") or "",
             "feed_url": feed.get("feed_url") or "", "feed_id": str(e.get("feed_id") or feed.get("id") or ""),
             "author": e.get("author") or "", "published_at": e.get("published_at") or e.get("created_at"),
@@ -199,7 +200,7 @@ class GReaderSource(Source):
         ts = it.get("published") or (int(it.get("crawlTimeMsec", 0)) // 1000) or None
         pub = datetime.fromtimestamp(int(ts), timezone.utc).isoformat() if ts else None
         return {
-            "id": short_id(str(it.get("id", ""))), "title": it.get("title") or "", "url": link or "",
+            "id": short_id(str(it.get("id", ""))), "title": it.get("title") or "", "url": safe_url(link),
             "content": content, "feed_title": origin.get("title") or "",
             "feed_url": (origin.get("streamId") or "").removeprefix("feed/"),
             "feed_id": origin.get("streamId") or "", "author": it.get("author") or "",

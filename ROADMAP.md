@@ -69,6 +69,17 @@ The goal is to send as little about *you* as possible.
 - [ ] Fine-tune Laya on your own clicks and stars once enough feedback has accumulated
 - [ ] Optional: mark articles as read in the reader once they've been shown in a digest
 
+## Operation and maintenance
+
+- [x] Automated tests (pytest, no models or network needed) and GitHub Actions on every push
+- [x] `deploy/update.sh`: update without killing a running digest
+- [x] Status page behind a password (nginx Basic Auth) on top of the secret path
+- [x] Reports (`learn`, `laya-report`, `privacy-report`, `opens-report`) on the status page
+- [x] `PRESET=small-server | laya | api-only` instead of a dozen single settings
+- [x] Pinned Laya dependencies (`constraints-laya.txt`), `.dockerignore` keeps `data/` out of the build
+- [ ] Once it's clear whether Laya or embeddings wins in daily use: simplify the other path, drop branch `onnx` if
+      Laya goes
+
 ## Sources
 
 - [ ] Native Nextcloud News adapter (currently via Google Reader API plugin)

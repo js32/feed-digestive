@@ -7,3 +7,4 @@ ollama/
 .DS_Store
 miniflux-sommelier/
 feed-digestive-privat/
+.pytest_cache/
