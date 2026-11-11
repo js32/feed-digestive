@@ -7,6 +7,9 @@ from dataclasses import dataclass, field
 from pathlib import Path
 
 
+# Logo für Bark-Nachrichten: das Projekt-Logo aus dem öffentlichen Repo (app/icon.png)
+BARK_ICON = "https://raw.githubusercontent.com/js32/feed-digestive/main/app/icon.png"
+
 # PRESET=… setzt mehrere Standardwerte auf einmal. Was einzeln in der .env steht, gilt weiterhin –
 # ein Profil ändert nur, was du nicht selbst eingetragen hast. Die Build-Optionen (WITH_LAYA,
 # DIGEST_MEM_LIMIT) liest Docker Compose, die stehen im README zu jedem Profil.
@@ -131,6 +134,7 @@ class Settings:
     ntfy_url: str = ""           # z. B. https://ntfy.sh/<zufälliger-name> – Nachricht, wenn der Digest fertig ist
     ntfy_token: str = ""         # Zugriffstoken, falls das Thema geschützt ist
     bark_url: str = ""           # Bark (iPhone): die Adresse aus der App, z. B. https://api.day.app/<schlüssel>
+    bark_icon: str = BARK_ICON   # Logo der Nachricht: Adresse eines Bildes, "off" = Bark-Logo
     notify_details: bool = False  # Rubriken und Titel in die Nachricht (sonst nur die Zahl der Artikel)
     keep_days: int = 30
 
@@ -238,6 +242,8 @@ class Settings:
             ntfy_url=_env("NTFY_URL", "") or "",
             ntfy_token=_env("NTFY_TOKEN", "") or "",
             bark_url=_env("BARK_URL", "") or "",
+            bark_icon="" if (_env("BARK_ICON", BARK_ICON) or "").lower() in ("off", "false", "0", "none")
+            else (_env("BARK_ICON", BARK_ICON) or ""),
             notify_details=_bool("NOTIFY_DETAILS", _bool("NTFY_DETAILS", False)),  # NTFY_DETAILS: alter Name
             keep_days=_int("KEEP_DAYS", 30),
             digest_time=_env("DIGEST_TIME", "06:30") or "06:30",

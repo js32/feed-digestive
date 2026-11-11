@@ -104,6 +104,7 @@ def test_bark_push(env, monkeypatch, url, push):
     body = sent[0]["json"]
     assert body["device_key"] == "AbCdEf123" and body["title"] == "Digest vom 11.11.2026: 3 Artikel"
     assert body["body"] == "Der neue Digest liegt im Feed." and body["level"] == "active"
+    assert body["icon"].endswith("/app/icon.png") and "tok" not in body["icon"]  # nie der geheime Pfad
     notify.run_failed(s, RuntimeError("x"))
     assert sent[1]["json"]["level"] == "timeSensitive"
 
@@ -120,6 +121,15 @@ def test_both_channels_and_one_failing(env, monkeypatch):
     sent = _capture(monkeypatch)
     assert notify.send(Settings.from_env(), "t", "m") == {"ntfy": True, "Bark": False}
     assert len(sent) == 1
+
+
+@pytest.mark.parametrize("value,expected", [("off", None), ("https://example.org/logo.png", "https://example.org/logo.png")])
+def test_bark_icon_setting(env, monkeypatch, value, expected):
+    env.setenv("BARK_URL", "https://api.day.app/key")
+    env.setenv("BARK_ICON", value)
+    sent = _capture(monkeypatch)
+    notify.send(Settings.from_env(), "t", "m")
+    assert sent[0]["json"].get("icon") == expected
 
 
 def test_old_setting_name_still_works(env):

@@ -1,6 +1,9 @@
 # Changelog
 
-## Unreleased
+## v1.2 – 2026-11-11
+
+Hardening, tests and a clearer view of why an article was picked: status page behind a password, signals that
+fade, topic feeds, push messages – and the 👍/👎 links are gone again.
 
 **Learning**
 - **👍/👎 links removed.** Readers that load the full article dropped them anyway. The negative side is covered
@@ -23,7 +26,8 @@
   Older digests are filled in from the history. Topics are now also assigned without a pre-filter (from the
   bullets in `interests.md`), so `MAX_PER_TOPIC` works with `PREFILTER=none` too.
 - **Push messages** via ntfy (`NTFY_URL`, `NTFY_TOKEN`) and/or Bark for iPhone (`BARK_URL`) when a digest is
-  ready or a run fails; only the number of articles unless `NOTIFY_DETAILS=true`. `check` sends a test message.
+  ready or a run fails; only the number of articles unless `NOTIFY_DETAILS=true`. `check` sends a test message. Bark messages carry the new project logo
+  (`BARK_ICON`; loaded from the public repo, never from your secret feed path).
 - nginx example: topic feeds passed through, `/v/` removed.
 - Roadmap: Laya stays the core pre-filter, embeddings the light alternative; ONNX is an open item again.
 

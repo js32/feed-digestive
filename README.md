@@ -1,3 +1,5 @@
+<img src="app/icon.png" width="72" align="right" alt="">
+
 # feed-digestive
 
 *Eats your RSS feeds, digests them overnight, serves you only the nutritious bits. Self-hosted, light-weight(s), learns your taste, no tracking but your own.*
@@ -34,6 +36,8 @@ feed reader ──► dedupe ──► local pre-filter ──► LLM scoring �
   interests that shift. A 🎲 random pick per digest and a cap per topic keep the filter bubble in check.
 - **Publishes a feed:** one daily digest entry, or one entry per article, plus one feed per topic of
   your profile. Excerpts in the language of your choice, whatever language the original is in.
+- **Tells you when it's ready:** optional push message via [ntfy](https://ntfy.sh) or
+  [Bark](https://github.com/Finb/Bark) when a digest is ready or a run failed.
 - **Explains itself:** "Warum steht das hier?" on the status page shows for every article what tipped
   the balance – score, topic, pre-filter, similarity to a star.
 - **Shows what it's doing:** a status page with the current run, the latest digest, how scores
@@ -568,6 +572,7 @@ At most 3 articles per source feed are taken, unless that's needed to reach `MIN
 | `NTFY_URL` | – | Address of an [ntfy](https://ntfy.sh) topic, e.g. `https://ntfy.sh/<long-random-name>` or your own server. Sends a push message when a digest is ready and when a run fails. `check` sends a test message. |
 | `NTFY_TOKEN` | – | Access token if the topic is protected. |
 | `BARK_URL` | – | The same via [Bark](https://github.com/Finb/Bark) (iPhone only): the address the app shows, e.g. `https://api.day.app/<key>`, or that of your own [bark-server](https://github.com/Finb/bark-server). Can be used together with `NTFY_URL`. |
+| `BARK_ICON` | project logo | Image shown with Bark messages: address of a PNG/JPG, `off` for Bark's own logo. Defaults to the project logo from the public GitHub repo – your iPhone loads it from there. |
 | `NOTIFY_DETAILS` | `false` | Put section names and article titles into the message. Off by default: the push service sees the message, so only the number of articles is sent. (`NTFY_DETAILS` still works as the old name.) |
 | `PUBLIC_URL` | `http://localhost:8080` | Public base URL as your reader sees it, e.g. `https://digest.example.org`. Used for feed and click links. |
 | `FEED_TOKEN` | – | Secret path segment: the feed lives at `PUBLIC_URL/FEED_TOKEN/feed.xml`. Generate with `openssl rand -hex 16`. |

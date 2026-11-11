@@ -45,6 +45,8 @@ def _bark(s: Settings, title: str, message: str, urgent: bool) -> None:
     base, key = _target(s.bark_url, "BARK_URL", "https://api.day.app/<schlüssel>")
     body = {"device_key": key, "title": title, "body": message, "group": "feed-digestive",
             "level": "timeSensitive" if urgent else "active"}
+    if s.bark_icon:  # das iPhone lädt das Bild selbst; bewusst keine Adresse mit deinem geheimen Feed-Pfad
+        body["icon"] = s.bark_icon
     r = httpx.post(f"{base}/push", json=body, timeout=10)
     r.raise_for_status()
     try:

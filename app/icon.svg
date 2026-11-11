@@ -1,0 +1,10 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 256 256">
+  <rect width="256" height="256" rx="56" fill="#4f46e5"/>
+  <!-- viele Artikel links, wenige ausgewählte rechts: ein Trichter aus Zeilen -->
+  <g fill="none" stroke="#fff" stroke-width="18" stroke-linecap="round">
+    <path d="M56 80h144" opacity=".45"/>
+    <path d="M56 128h104" opacity=".7"/>
+    <path d="M56 176h60"/>
+  </g>
+  <circle cx="184" cy="176" r="20" fill="#fbbf24"/>
+</svg>
