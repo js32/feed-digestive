@@ -288,13 +288,10 @@ def _scores(rows: list[dict]) -> dict:
 
 
 def _reactions(rows: list[dict]) -> dict:
-    from .feedback import votes
-    out: dict[str, set] = {"read": set(), "click": set(), "star": set(), "up": set(), "down": set()}
+    out: dict[str, set] = {"read": set(), "click": set(), "star": set()}
     for r in rows:
-        if r.get("kind") in ("read", "click", "star"):
+        if r.get("kind") in out:
             out[r["kind"]].add(str(r.get("entry_id")))
-    for eid, kind in votes(rows).items():  # letzte Stimme zählt
-        out[kind].add(eid)
     return out
 
 
@@ -328,6 +325,8 @@ def snapshot(s: Settings) -> dict:
         "feed_updated": (datetime.fromtimestamp(feed_file.stat().st_mtime, timezone.utc).isoformat()
                          if feed_file.exists() else None),
         "digest_count": len(digests),
+        "topic_feeds": [{**t, "url": f"{s.feed_base}/topic/{t['slug']}.xml"}
+                        for t in _load(s.data_dir / "topics" / "index.json", [])],
         "privacy": {**_privacy(s), "preset": s.privacy},
         "models": {"scoring": f"{s.scoring_provider}:{s.scoring_model}",
                    "summary": f"{s.summary_provider}:{s.summary_model}",
@@ -337,12 +336,11 @@ def snapshot(s: Settings) -> dict:
             "generated_at": latest.get("generated_at"),
             "considered": latest.get("considered"),
             "items": [{**{k: it.get(k) for k in ("digest_title", "title", "url", "feed", "score",
-                                                   "why", "topic", "explore", "filler", "similar_to")},
+                                                   "why", "topic", "explore", "filler", "similar_to",
+                                                   "interest_topic", "reasons")},
                        "read": str(it.get("entry_id")) in reactions["read"],
                        "clicked": str(it.get("entry_id")) in reactions["click"],
-                       "starred": str(it.get("entry_id")) in reactions["star"],
-                       "up": str(it.get("entry_id")) in reactions["up"],
-                       "down": str(it.get("entry_id")) in reactions["down"]}
+                       "starred": str(it.get("entry_id")) in reactions["star"]}
                       for it in latest.get("items", [])],
         },
     }

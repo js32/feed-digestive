@@ -24,9 +24,7 @@ ID_RE = re.compile(r"^[A-Za-z0-9_-]{1,64}$")
 HISTORY_DAYS = 180
 
 # Wie stark ein Signal für Interesse spricht (Gewicht beim Lernen). Zählt pro Artikel das stärkste.
-SIGNAL_WEIGHTS = {"read": 0.3, "click": 1.0, "star": 1.5, "up": 2.0}
-# 👎 "weniger davon": deutliches Negativbeispiel, schlägt alle anderen Signale
-DOWN_WEIGHT = 2.0
+SIGNAL_WEIGHTS = {"read": 0.3, "click": 1.0, "star": 1.5}
 # "Alle als gelesen markieren": so viele Einträge innerhalb weniger Sekunden zählen nicht als angelesen
 BULK_MIN, BULK_SECONDS = 4, 15
 
@@ -113,10 +111,6 @@ def tracked_url(feed_base: str, entry_id) -> str:
     return f"{feed_base}/r/{entry_id}"
 
 
-def vote_url(feed_base: str, entry_id, kind: str) -> str:
-    return f"{feed_base}/v/{entry_id}/{kind}"
-
-
 def pixel_url(feed_base: str, entry_id) -> str:
     return f"{feed_base}/p/{entry_id}.gif"
 
@@ -147,18 +141,6 @@ def record_click(data_dir: Path, entry_id: str, day_only: bool = False) -> None:
     if day_only:
         now = now.replace(hour=0, minute=0, second=0, microsecond=0)
     _append(data_dir / "feedback.jsonl", [{"ts": now.isoformat(), "entry_id": entry_id, "kind": "click"}])
-
-
-def lookup_title(data_dir: Path, entry_id: str) -> str | None:
-    try:
-        digests = json.loads((data_dir / "digests.json").read_text(encoding="utf-8"))
-    except (FileNotFoundError, json.JSONDecodeError):
-        return None
-    for d in digests:
-        for it in d.get("items", []):
-            if str(it.get("entry_id")) == entry_id:
-                return it.get("digest_title") or it.get("title")
-    return None
 
 
 def lookup_url(data_dir: Path, entry_id: str) -> str | None:
@@ -207,34 +189,34 @@ def collect_stars(data_dir: Path, starred_entries: list[dict], quiet: bool = Fal
 # ----------------------------------------------------------------------
 # Im Reader angelesen (Digest-Einträge, die der Reader als gelesen meldet)
 # ----------------------------------------------------------------------
-def votes(rows: list[dict]) -> dict[str, str]:
-    """entry_id -> "up" | "down", die jeweils letzte Stimme zählt (umentscheiden geht)."""
-    out: dict[str, str] = {}
-    for r in rows:
-        if r.get("kind") in ("up", "down"):
-            out[str(r.get("entry_id"))] = r["kind"]
-    return out
+def fade(ts: str | None, half_life_days: float, now: datetime | None = None) -> float:
+    """Wie viel ein Signal von damals heute noch zählt: nach einer Halbwertszeit die Hälfte, nach zwei
+    ein Viertel … Interessen wandern – was du vor Monaten angeklickt hast, soll leiser werden,
+    statt bis zum Löschtermin voll zu zählen. half_life_days <= 0 schaltet das Verblassen ab."""
+    if half_life_days <= 0 or not ts:
+        return 1.0
+    try:
+        then = datetime.fromisoformat(str(ts).replace("Z", "+00:00"))
+    except ValueError:
+        return 1.0
+    if then.tzinfo is None:
+        then = then.replace(tzinfo=timezone.utc)
+    age_days = ((now or datetime.now(timezone.utc)) - then).total_seconds() / 86400
+    return 0.5 ** (max(0.0, age_days) / half_life_days)
 
 
-def signals(rows: list[dict]) -> dict[str, dict[str, float]]:
-    """entry_id -> {kind: Gewicht} der positiven Signale aus feedback.jsonl (ohne 👎-Artikel)."""
-    vote = votes(rows)
+def signals(rows: list[dict], half_life_days: float = 0, now: datetime | None = None) -> dict[str, dict[str, float]]:
+    """entry_id -> {kind: Gewicht} der Signale aus feedback.jsonl. Mit half_life_days verblasst das
+    Gewicht mit dem Alter des Signals; pro Art zählt das jüngste (stärkste). Frühere 👍/👎-Einträge
+    (bis v1.1) stehen noch in der Datei, zählen aber nicht mehr."""
     out: dict[str, dict[str, float]] = {}
     for r in rows:
         kind = r.get("kind") or "click"
-        eid = str(r.get("entry_id"))
-        if kind == "up" and vote.get(eid) != "up":
-            continue  # später zurückgenommen
-        if kind in SIGNAL_WEIGHTS and vote.get(eid) != "down":
-            out.setdefault(eid, {})[kind] = SIGNAL_WEIGHTS[kind]
+        if kind in SIGNAL_WEIGHTS:
+            w = SIGNAL_WEIGHTS[kind] * fade(r.get("ts"), half_life_days, now)
+            kinds = out.setdefault(str(r.get("entry_id")), {})
+            kinds[kind] = max(kinds.get(kind, 0.0), w)
     return out
-
-
-def record_vote(data_dir: Path, entry_id: str, kind: str, day_only: bool = False) -> None:
-    now = datetime.now(timezone.utc)
-    if day_only:
-        now = now.replace(hour=0, minute=0, second=0, microsecond=0)
-    _append(data_dir / "feedback.jsonl", [{"ts": now.isoformat(), "entry_id": entry_id, "kind": kind}])
 
 
 def record_open(data_dir: Path, entry_id: str, user_agent: str | None, since_feed: float | None) -> None:

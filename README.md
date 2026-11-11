@@ -10,7 +10,7 @@ actually match your interests, writes a short excerpt for each and publishes the
 feed reader ──► dedupe ──► local pre-filter ──► LLM scoring ──► top 10 ──► excerpts ──► feed.xml
                             (embeddings or Laya)                                               │
    ▲                                                                                           │
-   └──── 👍/👎, stars & clicks ◄── learns your taste ◄── you read the digest ◄─────────────────┘
+   └──── stars & clicks ◄──── learns your taste ◄──── you read the digest ◄───────────────────┘
 ```
 
 ## What it does
@@ -30,11 +30,12 @@ feed reader ──► dedupe ──► local pre-filter ──► LLM scoring �
 - **Sorts locally:** optional sentence embeddings (fastembed, no PyTorch) spot the same story
   from several sources and tell you which of your starred articles a suggestion resembles.
 - **Groups by topic:** the digest comes in sections like "Rechenzentren" or "Gesundheit".
-- **Learns from you:** 👍 "mehr davon" / 👎 "weniger davon" under each article, clicks and stars
-  train a small local model. A 🎲 random pick per digest and a cap per topic keep the filter bubble
-  in check.
-- **Publishes a feed:** one daily digest entry, or one entry per article. Excerpts in the
-  language of your choice, whatever language the original is in.
+- **Learns from you:** clicks and stars train a small local model; old signals fade, so it follows
+  interests that shift. A 🎲 random pick per digest and a cap per topic keep the filter bubble in check.
+- **Publishes a feed:** one daily digest entry, or one entry per article, plus one feed per topic of
+  your profile. Excerpts in the language of your choice, whatever language the original is in.
+- **Explains itself:** "Warum steht das hier?" on the status page shows for every article what tipped
+  the balance – score, topic, pre-filter, similarity to a star.
 - **Shows what it's doing:** a status page with the current run, the latest digest, how scores
   are spread around your threshold, service checks and the live log.
 - **Tells you what left your server:** every LLM call is logged locally; `privacy-report` and the
@@ -102,7 +103,7 @@ The first `check` downloads the local models into `data/` (embeddings ~220 MB, L
 
 **Reverse proxy:** the container only listens on `127.0.0.1:8087`. Copy
 `deploy/nginx.conf.example`, replace `digest.example.org` with your domain, get a certificate
-(e.g. `certbot --nginx -d your.domain`) and reload nginx. Only the feed, the click redirects, the 👍/👎 links
+(e.g. `certbot --nginx -d your.domain`) and reload nginx. Only the feed, the topic feeds and the click redirects
 are passed through, plus the status page (see below); everything else returns 404.
 
 The status page shows what you read, click and like, so the example protects it with a password
@@ -193,8 +194,9 @@ compares it with:
 
 - **your topics:** the bullet points under "Hohe Priorität" / "Mittlere Priorität" in `interests.md`
   (high = weight 1.0, medium = 0.8; the `local-only` part counts too, nothing leaves the server),
-- **your favourites:** `examples.txt`, starred articles, and digest articles you 👍, starred or clicked,
-- **what you don't want:** the bullets under "Niedrige Priorität / eher nicht" and 👎 articles.
+- **your favourites:** `examples.txt`, starred articles, and digest articles you starred or clicked
+  (until they have faded, see `SIGNAL_HALF_LIFE_DAYS`),
+- **what you don't want:** the bullets under "Niedrige Priorität / eher nicht".
 
 That gives one feature per topic plus "like" and "dislike" – the same kind of answers Laya gives, so
 everything above works the same way. Embeddings judge *what an article is about*, not how deep it is;
@@ -345,25 +347,41 @@ With `GROUP_TOPICS=true` (default) the summary model sorts the selected articles
 sections in one short extra call (titles and "why read" only). Articles that fit no group go under
 "Weitere Themen"; in `FEED_MODE=items` the topic is set as the entry's category.
 
+### Topic feeds
+
+Besides the digest there is one feed per topic of your profile, with one entry per article:
+`https://your.domain/<FEED_TOKEN>/topic/<topic>.xml`, e.g. `…/topic/philosophie.xml` or
+`…/topic/kuenstliche-intelligenz.xml`. Subscribe to the ones you never want to miss, in addition to
+or instead of the digest. The status page lists the feeds with their addresses.
+
+The topic is the one the scoring LLM assigns to each article from your topic list (the Laya catalogue,
+or the bullets under "Hohe/Mittlere Priorität" in `interests.md`) – stable from day to day, unlike
+the section headings inside a digest. Needs `MAX_PER_TOPIC` > 0 (default) and an LLM for scoring; a
+feed disappears when no article of its topic is left within `KEEP_DAYS`.
+
 ## Learning from what you read
 
-feed-digestive learns what you actually read, and keeps that knowledge on your server. Three
+feed-digestive learns what you actually read, and keeps that knowledge on your server. These
 signals count, each article by its strongest one:
 
 | Signal | How it's detected | Weight |
 |---|---|---|
-| 👍 **"mehr davon"** | tap on the link under each article (`VOTE_LINKS`) | 2.0 |
 | ★ **Starred** | star in your reader, on the digest entry or the original article | 1.5 |
 | ✓ **Clicked "→ Zum Artikel"** | redirect through your own server | 1.0 |
 | 👁 **Read in your reader** | off by default (`READ_SIGNAL`), see below | 0.3 |
-| 👎 **"weniger davon"** | tap on the link under each article – a clear *negative* example | −2.0 |
+| ∅ **Shown, but left alone** | in a digest and neither clicked nor starred after `FEEDBACK_DAYS` – the *negative* example | −1.0 |
+| ∅ **Never shown** | scored, never in a digest, never starred – a weak negative ("not seen" isn't "not interesting") | −0.15 |
+
+All of them **fade**: after `SIGNAL_HALF_LIFE_DAYS` (default 30) an example counts half, after twice
+that a quarter. What you clicked months ago gets quieter instead of counting in full until it's
+deleted, so the model follows interests that shift. `0` turns fading off.
 
 - **Clicks:** links in the digest point to `your.domain/<token>/r/<id>`, which records the click
   and redirects to the article. Crawlers, link previews and scripts don't count. The target
   site sees neither your secret path (`Referrer-Policy: no-referrer`) nor that you came from the digest.
-- **👍/👎:** two small links next to "→ Zum Artikel". A tap opens a short "Notiert" page on your
-  server (with a link to change your mind); the latest vote counts. 👎 is the only way to tell the
-  app what you *don't* want – otherwise it can only guess from missing clicks.
+- **No explicit "less of this":** the 👍/👎 links of v1.1 are gone – readers that load the full
+  article dropped them anyway, and "shown, but left alone" does the same job without a tap. A late
+  click still turns such an example positive.
 - **Read (`READ_SIGNAL=true`, off by default):** with `FEED_MODE=items` the reader's read status of
   each digest entry is fetched from Miniflux. Only useful if you never mark entries as read to tidy
   up – a reader can't tell the app whether you actually read something. "Mark all as read" (4 or
@@ -377,13 +395,21 @@ signals count, each article by its strongest one:
 - **Learning:** a small logistic regression on the pre-filter's answers (Laya or embeddings)
   predicts what you'll be interested in, with each example weighted by its signal. It works on top
   of the model learned from the LLM's scores. It kicks in after 5 weighted positive and 10
-  negative examples, and its share of the score grows with feedback up to 80%. A shown article only
-  counts as "not interesting" after `FEEDBACK_DAYS` without any signal.
+  negative examples, and its share of the score grows with (faded) feedback up to 80%. A shown article
+  only counts as "not interesting" after `FEEDBACK_DAYS` without any signal.
+- **Profile suggestion:** `python -m app profile-suggest` (or "Profilvorschlag" under Berichte on the
+  status page) lets the summary model compare `interests.md` with what you clicked and starred, and
+  with what you were shown and left alone. You get a short, readable suggestion – what to add, what to
+  sharpen, what might matter less, each with one or two titles as evidence. Nothing is applied
+  automatically: you decide what goes into `interests.md`; a copy is kept in
+  `data/interests.suggested.md`. The titles go to the summary provider, so with `PRIVACY=strict` this
+  only runs with a local model.
 - **Filter bubble:** one slot per digest (`EXPLORE_SLOTS`) is a 🎲 random pick from just below
   the cut-off, so topics the model underrates still get a chance.
 
 ```bash
 docker compose exec digest python -m app learn    # show what it has learned
+docker compose exec digest python -m app profile-suggest   # suggestion for interests.md
 docker compose exec digest python -m app laya-report   # which Laya questions actually help
 docker compose exec digest python -m app opens-report   # result of the OPEN_PIXEL measurement
 ```
@@ -393,7 +419,7 @@ Data is kept in `data/history.jsonl` and `data/feedback.jsonl` for 180 days. Set
 
 **Reader settings that matter:**
 - Don't let your reader (e.g. Miniflux "fetch original content") replace the digest entries with the
-  original article: that removes "why read", the excerpt and the 👍/👎 links. Open the full text on
+  original article: that removes "why read" and the excerpt. Open the full text on
   demand in the reader instead (Reeder: reader view). Original articles in your normal feeds can stay
   on full text.
 - Your reader should poll the digest feed at least hourly; the feed changes once a day.
@@ -522,13 +548,13 @@ At most 3 articles per source feed are taken, unless that's needed to reach `MIN
 | Setting | Default | Description |
 |---|---|---|
 | `TRACK_CLICKS` | `true` | Route digest links through `/<token>/r/<id>` and count clicks. `false` uses direct links and learns from stars only. |
-| `LEARN` | `true` | With a pre-filter: learn from 👍/👎, clicks and stars. |
-| `FEEDBACK_DAYS` | `3` | A shown article counts as "not interesting" only after this many days without a click. |
+| `LEARN` | `true` | With a pre-filter: learn from clicks and stars. |
+| `SIGNAL_HALF_LIFE_DAYS` | `30` | Signals fade: after this many days a click, a star or a "shown, but left alone" counts half. `0` = no fading. |
+| `FEEDBACK_DAYS` | `7` | A shown article counts as "not interesting" only after this many days without a click. Raise it if you leave digest entries unread as a to-do list; a later click still turns the example positive. |
 | `PRIVACY` | `standard` | `strict` sends as little about you as possible: only `interests.md` (without its `local-only` part) goes to cloud providers – no examples (`EXAMPLES_IN_PROMPT=0`), no starred titles (`USE_MINIFLUX_STARRED=false`), lean excerpt prompts (`SUMMARY_PROFILE=lean`) – and clicks are stored with their date only. Stars and clicks still train the local model. Any of these set individually in `.env` wins. Scoring gets a bit less precise without examples. |
 | `LLM_AUDIT` | `on` | Log every LLM call to `data/llm_audit.jsonl`: provider, model, purpose, size, article titles and which parts of your profile went along. `full` also stores the complete prompts, `off` disables it. Read it with `privacy-report` or on the status page. |
 | `LLM_AUDIT_DAYS` | `30` | Delete audit entries older than this. |
 | `STAR_POLL_MINUTES` | `15` | Pick up new stars from the feed reader this often, in addition to each run, so they show up on the status page soon. `0` = only during runs. |
-| `VOTE_LINKS` | `true` | 👍 mehr davon / 👎 weniger davon under each article. Both are learning signals; 👎 is a strong negative example. |
 | `READ_SIGNAL` | `false` | Count "read in the reader" (Miniflux, `FEED_MODE=items`) as a weak signal (0.3). Leave off if you mark entries as read to tidy up. |
 | `OPEN_PIXEL` | `off` | `log` adds an invisible image per article and logs when it's loaded – a measurement only, see `opens-report`. Needs the `/p/` location in nginx. |
 
@@ -539,6 +565,9 @@ At most 3 articles per source feed are taken, unless that's needed to reach `MIN
 | `FEED_MODE` | `daily` | `daily`: one feed entry per digest with all articles. `items`: one feed entry per article – needed for `READ_SIGNAL`. Takes effect on the next start. |
 | `FEED_TITLE` | `Mein Tages-Digest` | Title of the feed in your reader. |
 | `KEEP_DAYS` | `30` | How long digests stay in the feed. |
+| `NTFY_URL` | – | Address of an [ntfy](https://ntfy.sh) topic, e.g. `https://ntfy.sh/<long-random-name>` or your own server. Sends a push message when a digest is ready and when a run fails. `check` sends a test message. |
+| `NTFY_TOKEN` | – | Access token if the topic is protected. |
+| `NTFY_DETAILS` | `false` | Put section names and article titles into the message. Off by default: whoever knows the topic name can read along, so only the number of articles is sent. |
 | `PUBLIC_URL` | `http://localhost:8080` | Public base URL as your reader sees it, e.g. `https://digest.example.org`. Used for feed and click links. |
 | `FEED_TOKEN` | – | Secret path segment: the feed lives at `PUBLIC_URL/FEED_TOKEN/feed.xml`. Generate with `openssl rand -hex 16`. |
 
@@ -590,8 +619,13 @@ the example nginx config, a password (see Installation). It shows:
 - whether a run is in progress, in which stage and why it waits (e.g. a provider's rate limit); the
   browser tab title and icon show the state too
 - the numbers of the current or last run: fetched, new, scored, picked
-- the latest digest grouped by topic, with scores and your signals per article (👍, 👎, ★, ✓ clicked),
+- the latest digest grouped by topic, with scores and your signals per article (★, ✓ clicked), and
+  **"Warum steht das hier?"** per article: how it was selected (regular, topic variety, filler, random
+  pick), the score with the LLM's reason, its topic, the pre-filter's value and how it got through
+  (by value, via a seat for its topic, as a control sample), and the similarity to a starred article –
   plus the best articles that just missed it
+- the topic feeds with their addresses
+- reports: what was learned, Laya questions, privacy, and the profile suggestion
 - how scores of the last 7 days are spread around `MIN_SCORE` and `FLOOR_SCORE`, as a hint for
   tuning the threshold
 - the last runs with duration and result
@@ -621,8 +655,11 @@ memory/CPU limits (`DIGEST_MEM_LIMIT`, `DIGEST_CPUS`).
 
 ## Privacy
 
-- **Stays on your server:** your reading history, clicks, stars, 👍/👎, the learned models and,
+- **Stays on your server:** your reading history, clicks, stars, the learned models and,
   with a pre-filter, the pre-sorting of all articles.
+- **Goes to ntfy, only if you set `NTFY_URL`:** the date and the number of articles of a new digest,
+  or the fact that a run failed. Section names and titles only with `NTFY_DETAILS=true`. Use your own
+  ntfy server or a protected topic if that matters to you.
 - **Goes to your LLM provider:** titles, snippets and text of the articles being scored or
   summarised, plus your interest profile. With a pre-filter in front, that's ~40–60 instead of all
   articles. Use Ollama if nothing should leave your server.
@@ -646,7 +683,8 @@ python -m pytest tests
 The tests need neither Laya nor embeddings nor network access, and run on every push (GitHub
 Actions). They cover the LLM client (thinking-mode fallback, also in parallel; rate limits; JSON
 repair), selection, feed escaping, settings and presets, and the web server (secret path, no open
-redirect, votes only from people, reports only from a fixed list).
+redirect, clicks only from people, reports only from a fixed list), fading signals, topic feeds,
+notifications and a complete run with a fake source and a fake LLM.
 
 ## Roadmap
 

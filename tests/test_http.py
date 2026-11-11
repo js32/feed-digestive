@@ -59,23 +59,33 @@ def test_no_open_redirect(server):
     assert c.get("/tok/r/bad", headers=UA).status_code == 404
 
 
-def test_vote_counts_and_escapes(server):
+def test_old_vote_links_are_gone(server):
     c, d = server
     r = c.get("/tok/v/a1/up", headers=UA)
-    assert r.status_code == 200 and "Ein Titel &lt;b&gt;" in r.text
-    assert _feedback(d)[-1]["kind"] == "up"
-
-
-@pytest.mark.parametrize("headers", [{"User-Agent": "Googlebot"}, {**UA, "Sec-Purpose": "prefetch"}, {}])
-def test_vote_ignored_for_bots_and_prefetch(server, headers):
-    c, d = server
-    assert c.get("/tok/v/a1/down", headers=headers).status_code == 200
+    assert r.status_code == 410 and "Stern" in r.text
     assert _feedback(d) == []
+
+
+def test_click_ignored_for_bots_and_prefetch(server):
+    c, d = server
+    for headers in ({"User-Agent": "Googlebot"}, {**UA, "Sec-Purpose": "prefetch"}, {}):
+        assert c.get("/tok/r/a1", headers=headers).status_code == 302
+    assert _feedback(d) == []
+
+
+def test_topic_feed_served(server):
+    c, d = server
+    (d / "topics").mkdir()
+    (d / "topics" / "philosophie.xml").write_text("<feed>phil</feed>")
+    assert c.get("/tok/topic/philosophie.xml").text == "<feed>phil</feed>"
+    assert c.get("/tok/topic/unbekannt.xml").status_code == 404
+    assert c.get("/topic/philosophie.xml").status_code == 404           # nur hinter dem geheimen Pfad
+    assert c.get("/tok/topic/..%2Fdigests.json.xml").status_code == 404  # kein Ausbruch aus dem Ordner
+    assert c.get("/tok/topic/Philosophie.xml").status_code == 404
 
 
 def test_head_does_not_count(server):
     c, d = server
-    c.head("/tok/v/a1/up", headers=UA)
     c.head("/tok/r/a1", headers=UA)
     assert _feedback(d) == []
 
@@ -90,7 +100,7 @@ def test_report_whitelist(server, monkeypatch):
         assert c.get(f"/tok/status/report/{bad}").status_code == 404
     assert c.head("/tok/status/report/learn").status_code == 404  # HEAD startet keinen Bericht
     assert seen == ["learn"]
-    assert set(REPORTS) == {"learn", "laya", "privacy", "opens"}
+    assert set(REPORTS) == {"learn", "laya", "privacy", "opens", "profile"}
 
 
 def test_report_runs_in_subprocess(settings):

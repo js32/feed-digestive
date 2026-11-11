@@ -254,7 +254,7 @@ def select(items: list[dict], top_n: int, min_score: int,
     per_topic: dict = {}
     chosen, ids, dupes = [], set(), set()
 
-    def take(it, cap: bool, topic_cap: bool = False) -> bool:
+    def take(it, cap: bool, topic_cap: bool = False, via: str = "score") -> bool:
         if it["id"] in ids or it["id"] in dupes or len(chosen) >= top_n:
             return False
         if cap and per_feed.get(it["feed_id"], 0) >= MAX_PER_FEED:
@@ -270,6 +270,7 @@ def select(items: list[dict], top_n: int, min_score: int,
         per_feed[it["feed_id"]] = per_feed.get(it["feed_id"], 0) + 1
         if topic:
             per_topic[topic] = per_topic.get(topic, 0) + 1
+        it["selected_via"] = via  # für "Warum steht das hier?"
         chosen.append(it)
         ids.add(it["id"])
         return True
@@ -281,7 +282,7 @@ def select(items: list[dict], top_n: int, min_score: int,
         before = len(chosen)
         for it in ranked:  # andere Themen knapp darunter bekommen den Vorzug
             if it["score"] >= min_score - 1:
-                take(it, cap=True, topic_cap=True)
+                take(it, cap=True, topic_cap=True, via="variety")
         if len(chosen) > before:
             log.info("Themenvielfalt: %d Artikel knapp unter %d aus weniger vertretenen Themen", len(chosen) - before,
                      min_score)
@@ -295,7 +296,7 @@ def select(items: list[dict], top_n: int, min_score: int,
             if len(chosen) >= target:
                 break
             if it["score"] >= floor_score:
-                take(it, cap=cap)
+                take(it, cap=cap, via="filler")
     for it in chosen[regular:]:
         it["filler"] = True
     if len(chosen) > regular:
@@ -374,6 +375,60 @@ def group_by_topic(chosen: list[dict], llm: LLM, lang: str) -> list[dict]:
     return out + [it for it in chosen if it.get("explore")]
 
 
+def interest_topic(it: dict, topic_labels: list[str], by_feature: dict[str, str] | None = None) -> str | None:
+    """Das Interessen-Thema eines Artikels in der Schreibweise aus deinem Profil – stabil über Tage,
+    anders als die Rubrik-Überschriften im Digest. Grundlage der Themenfeeds.
+    Vom LLM beim Bewerten zugeordnet, sonst die stärkste Themenfrage des Vorfilters (by_feature:
+    Merkmal "topic_<id>" -> Bezeichnung)."""
+    t = (it.get("score_topic") or "").strip()
+    if t and t.lower() not in ("sonstiges", "other", "-"):
+        return next((lab for lab in topic_labels if lab.lower() == t.lower()), t)
+    f = it.get("laya_features") or {}
+    best = max((k for k in f if k in (by_feature or {})), key=lambda k: f[k], default=None)
+    return by_feature[best] if best and f[best] >= 0.5 else None
+
+
+def explain(it: dict, s: Settings, topic: str | None) -> list[dict]:
+    """Warum steht dieser Artikel im Digest? Jede Zeile ein Grund: {"label", "text", "value"?}
+    (value 0–10 zeichnet die Status-Seite als Balken)."""
+    out = []
+    if it.get("explore"):
+        out.append({"label": "Auswahl", "text": "Zufallsfund – bewusst von knapp unterhalb der Auswahl gezogen, "
+                                                 "gegen die Filterblase"})
+    else:
+        via = it.get("selected_via")
+        text = {"variety": f"Themenvielfalt – einen Punkt unter MIN_SCORE {s.min_score}, aber aus einem Thema, "
+                           "das sonst zu kurz käme",
+                "filler": f"Aufgefüllt – unter MIN_SCORE {s.min_score}, damit der Digest nicht zu dünn wird",
+                }.get(via, f"Regulär – Note ab MIN_SCORE {s.min_score}")
+        out.append({"label": "Auswahl", "text": text})
+    if it.get("score") is not None:
+        why = (it.get("score_why") or "").strip()
+        if s.scoring_provider == "none":
+            why = "ohne Bewertungs-LLM: gerundeter Wert der Vorauswahl"
+        elif not why and it.get("cached_score") is not None:
+            why = "Bewertung aus einem früheren Lauf übernommen"
+        out.append({"label": "Note", "text": f"{it['score']}/10" + (f" – {why}" if why else ""),
+                    "value": float(it["score"])})
+    if topic:
+        out.append({"label": "Thema", "text": topic})
+    if it.get("prefilter") is not None:
+        via = str(it.get("prefilter_via") or "")
+        how = ("über einen Mindestplatz für das Thema " + via.removeprefix("topic:") if via.startswith("topic:")
+               else "zur Kontrolle zufällig von unterhalb der Schwelle" if via == "explore"
+               else "nachgerückt, weil sonst zu wenige Artikel übrig geblieben wären" if via == "fill"
+               else "über den Wert")
+        name = "Laya" if s.prefilter == "laya" else "Embeddings"
+        out.append({"label": f"Vorauswahl ({name})",
+                    "text": f"{it['prefilter']:.1f}/10, durchgekommen {how} – {it.get('prefilter_why') or ''}".rstrip(" –"),
+                    "value": float(it["prefilter"])})
+    if it.get("similar_to"):
+        out.append({"label": "Stern-Ähnlichkeit",
+                    "text": f"{it.get('similar_sim', 0):.2f} zu „{it['similar_to']}“",
+                    "value": 10 * float(it.get("similar_sim", 0))})
+    return out
+
+
 # ----------------------------------------------------------------------
 # Lauf
 # ----------------------------------------------------------------------
@@ -440,7 +495,7 @@ def _run(s: Settings, dry_run: bool = False) -> dict | None:
         local_filter = s.prefilter in ("laya", "embeddings")
         if local_filter and s.learn:
             from .learn import retrain
-            learner = retrain(s.data_dir, s.feedback_days)
+            learner = retrain(s.data_dir, s.feedback_days, s.signal_half_life_days)
         starred = [f"{e['feed_title']}: {e['title']}" for e in starred_entries[:30]] if s.use_starred else []
         summarizer = LLM(s.summary_provider, s.summary_model)
         # Auszüge brauchen ggf. nur die Interessen (SUMMARY_PROFILE=lean), nicht Beispiele und Sterne
@@ -475,6 +530,16 @@ def _run(s: Settings, dry_run: bool = False) -> dict | None:
         else:
             all_scored = items
 
+        # Themen aus dem Vorfilter, sonst aus den Stichpunkten in interests.md – für Themenvielfalt und Themenfeeds
+        topic_features = {f"topic_{k}": t.get("label", k) for k, t in flt.spec["topics"].items()} if flt else {}
+        if flt:
+            topics = list(topic_features.values())
+        else:
+            from .embed_filter import parse_interests
+            imd = s.config_dir / "interests.md"
+            topics = [t["label"] for t in parse_interests(
+                imd.read_text(encoding="utf-8") if imd.exists() else "")[0].values()] or None
+
         # Stufe 1: Bewertung per LLM – oder direkt den Laya-Wert übernehmen
         if s.scoring_provider == "none":
             log.info("Bewertung = Laya-Wert, Auszüge mit %s", summarizer)
@@ -492,7 +557,6 @@ def _run(s: Settings, dry_run: bool = False) -> dict | None:
             log.info("Bewerte %d Artikel mit %s (%d aus früheren Läufen), Auszüge mit %s",
                      len(todo), scorer, len(items) - len(todo), summarizer)
             if todo:
-                topics = [t.get("label", k) for k, t in flt.spec["topics"].items()] if flt else None
                 score(todo, scorer, build_profile(s, starred, local=scorer.is_local), s.scoring_batch_size,
                       topics=topics if s.max_per_topic > 0 else None)
                 for it in todo:
@@ -548,7 +612,7 @@ def _run(s: Settings, dry_run: bool = False) -> dict | None:
                     log.info("Stern-Vergleich %.2f%s: %r ~ %r", sim, "" if hit else " (zu schwach)",
                              it["title"], star["title"])
                     if hit:
-                        it["similar_to"] = star["title"]
+                        it["similar_to"], it["similar_sim"] = star["title"], round(float(sim), 2)
         if emb and not dry_run:
             emb.save()
         if s.group_topics:
@@ -564,6 +628,10 @@ def _run(s: Settings, dry_run: bool = False) -> dict | None:
                       or (str(it["id"]) not in cache and not it.get("_logged"))]
             feedback.log_history(s.data_dir, run_id, to_log, shown_ids)
 
+        for it in chosen:
+            it["interest_topic"] = interest_topic(it, topics or [], topic_features)
+            it["reasons"] = explain(it, s, it["interest_topic"])
+
         local = now.astimezone(ZoneInfo(s.tz))
         digest = {
             "id": run_id,
@@ -574,7 +642,7 @@ def _run(s: Settings, dry_run: bool = False) -> dict | None:
                 {"entry_id": it["id"], **{k: it.get(k) for k in (
                     "digest_title", "title", "url", "feed", "author", "published",
                     "score", "excerpt", "why", "reading_time", "explore", "filler",
-                    "topic", "similar_to")}}
+                    "topic", "similar_to", "interest_topic", "reasons")}}
                 for it in chosen
             ],
         }

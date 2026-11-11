@@ -2,6 +2,31 @@
 
 ## Unreleased
 
+**Learning**
+- **👍/👎 links removed.** Readers that load the full article dropped them anyway. The negative side is covered
+  by what was there from the start: an article shown in a digest and neither clicked nor starred counts as a
+  negative example. Old votes in `feedback.jsonl` no longer count; old links answer with a short note (410).
+  `VOTE_LINKS` is gone.
+- **Signals fade** (`SIGNAL_HALF_LIFE_DAYS`, default 30): after one half-life a click, a star or a "shown, but
+  left alone" counts half, after two a quarter – in the learned model and in the embedding pre-filter's
+  favourites. `0` turns it off.
+- `FEEDBACK_DAYS` now defaults to 7 instead of 3 – for people who leave digest entries unread as a to-do list.
+- **Profile suggestion** (`python -m app profile-suggest`, also under Berichte on the status page): the summary
+  model compares `interests.md` with what you clicked, starred and left alone and proposes what to add, sharpen
+  or drop, with titles as evidence. Never applied automatically; not sent to a cloud provider with `PRIVACY=strict`.
+
+**Output**
+- **"Warum steht das hier?"** per article on the status page: selection path (regular, topic variety, filler,
+  random pick), score with the LLM's reason, topic, pre-filter value and how the article got through (by value,
+  seat for its topic, control sample), similarity to a starred article.
+- **Topic feeds:** one feed per topic of your profile at `/<token>/topic/<topic>.xml`, listed on the status page.
+  Older digests are filled in from the history. Topics are now also assigned without a pre-filter (from the
+  bullets in `interests.md`), so `MAX_PER_TOPIC` works with `PREFILTER=none` too.
+- **ntfy** (`NTFY_URL`, `NTFY_TOKEN`, `NTFY_DETAILS`): push message when a digest is ready or a run fails; only
+  the number of articles unless `NTFY_DETAILS=true`. `check` sends a test message.
+- nginx example: topic feeds passed through, `/v/` removed.
+- Roadmap: Laya stays the core pre-filter, embeddings the light alternative; ONNX is an open item again.
+
 **Security and privacy**
 - Status page behind a password: the nginx example adds Basic Auth on top of the secret path – the page shows
   what you read, click and like, and the feed URL travels further than you'd think. README shows how to create
@@ -10,7 +35,7 @@
   them nginx refused to load the config.
 - Only `http(s)` links from feeds are used; `javascript:`/`data:` links and control characters are dropped
   before they reach the feed or a redirect.
-- Votes and clicks no longer count when a browser or link preview loads the link ahead of time
+- Clicks no longer count when a browser or link preview loads the link ahead of time
   (`Sec-Purpose: prefetch`), and link-preview fetchers like WhatsApp or `facebookexternalhit` count as bots.
 - `.dockerignore`: the build context no longer includes `data/` (models, several GB), `.env` or `config/`.
 - Laya dependencies pinned in `constraints-laya.txt` (PyTorch 2.15.0, transformers 5.22.1 …).
@@ -26,7 +51,7 @@
   `.env.example` now starts with `PRESET=small-server`.
 
 **Development**
-- Tests (`python -m pytest tests`, 69 tests, no models or network) and a GitHub Action running them on every push.
+- Tests (`python -m pytest tests`, 100+ tests, no models or network) and a GitHub Action running them on every push.
 
 **LLM and selection**
 - `REASONING_EFFORT=none`: if a model rejects `none`, `low` is tried before the parameter is dropped – Mistral

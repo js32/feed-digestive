@@ -176,6 +176,21 @@ button.badge[aria-expanded="true"] .chev { transform: rotate(180deg); }
 .item-why { margin: 4px 0 0; color: var(--text-2); overflow-wrap: anywhere; }
 .item-similar { margin-top: 6px; font-size: 12px; color: var(--text-3); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .item-similar b { font-weight: 500; color: var(--text-2); }
+.item-reasons { margin-top: 8px; font-size: 12px; color: var(--text-2); }
+.item-reasons summary { cursor: pointer; color: var(--text-3); width: fit-content; }
+.item-reasons summary:hover { color: var(--text-2); }
+.item-reasons dl { margin: 8px 0 0; display: grid; grid-template-columns: minmax(0, 9.5em) minmax(0, 1fr); gap: 6px 12px; }
+.item-reasons dt { color: var(--text-3); overflow-wrap: anywhere; }
+.item-reasons dd { margin: 0; overflow-wrap: anywhere; }
+.item-reasons .meter { height: 4px; margin-top: 4px; border-radius: 2px; background: var(--gray-bg); overflow: hidden; }
+.item-reasons .meter i { display: block; height: 100%; background: var(--brand); border-radius: 2px; }
+@media (max-width: 520px) { .item-reasons dl { grid-template-columns: 1fr; gap: 2px 0; } .item-reasons dd { margin-bottom: 6px; } }
+.topic-feeds { margin: 0; padding: 0; list-style: none; display: grid; gap: 8px; }
+.topic-feeds li { display: flex; align-items: center; justify-content: space-between; gap: 12px; min-width: 0; }
+.topic-feeds .name { min-width: 0; overflow-wrap: anywhere; }
+.topic-feeds .count { color: var(--text-3); font-size: 12px; white-space: nowrap; margin-left: 8px; }
+.topic-feeds .btn { flex: none; }
+.btn[hidden] { display: none; }
 .item-meta { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; margin-top: 8px; font-size: 12px; color: var(--text-3); min-width: 0; }
 .item-meta > span:first-child { overflow-wrap: anywhere; }
 .item-meta .badge { white-space: normal; max-width: 100%; }
@@ -374,6 +389,13 @@ details.raw .tbl th, details.raw .tbl td { padding-left: 0; padding-right: 16px;
         </div>
         <ul class="list" id="near"></ul>
       </section>
+      <section class="card" id="topics-card" aria-labelledby="topics-h" hidden>
+        <div class="card-head">
+          <h2 id="topics-h">Themenfeeds</h2>
+          <p>Ein eigener Feed je Thema aus deinem Interessenprofil – zum Abonnieren im Reader, zusätzlich zum Digest.</p>
+        </div>
+        <div class="card-body"><ul class="topic-feeds" id="topic-feeds"></ul></div>
+      </section>
     </div>
 
     <div class="stack">
@@ -422,6 +444,7 @@ details.raw .tbl th, details.raw .tbl td { padding-left: 0; padding-right: 16px;
         <button type="button" class="btn" data-report="laya" title="python -m app laya-report">Laya-Fragen</button>
         <button type="button" class="btn" data-report="privacy" title="python -m app privacy-report">Datenschutz</button>
         <button type="button" class="btn" data-report="opens" title="python -m app opens-report">Öffnungen</button>
+        <button type="button" class="btn" data-report="profile" data-confirm="Der Profilvorschlag schickt die Titel deiner Klicks und Sterne an das Auszugsmodell. Noch einmal antippen, um ihn zu erstellen." title="python -m app profile-suggest">Profilvorschlag</button>
       </div>
       <div class="report-meta">
         <p id="report-note" class="report-note">Einen Bericht wählen. Er wird beim Antippen neu berechnet (dauert ein paar Sekunden).</p>
@@ -745,6 +768,7 @@ function renderPrivacy() {
 }
 
 // ---------- Digest ----------
+const openReasons = new Set();
 function itemRow(it, withWhy) {
   const li = el("li");
   li.append(el("span", "score", it.score ?? "–"));
@@ -762,8 +786,6 @@ function itemRow(it, withWhy) {
   if (it.read && !it.clicked) meta.append(badge("gray", "👁 angelesen"));
   if (it.clicked) meta.append(badge("ok", "✓ angeklickt"));
   if (it.starred) meta.append(badge("warn", "★ Stern"));
-  if (it.up) meta.append(badge("ok", "👍 mehr davon"));
-  if (it.down) meta.append(badge("gray", "👎 weniger davon"));
   if (it.explore) meta.append(badge("run", "Zufallsfund"));
   if (it.filler) meta.append(badge("gray", "Auffüller"));
   text.append(meta);
@@ -773,8 +795,49 @@ function itemRow(it, withWhy) {
     sim.append("☆ ähnlich zu ", el("b", "", `„${it.similar_to}“`));
     text.append(sim);
   }
+  if (it.reasons && it.reasons.length) {  // "Warum steht das hier?" – ein Grund pro Zeile, Zahlen als Balken
+    const det = el("details", "item-reasons");
+    det.open = openReasons.has(it.url);  // die Seite lädt sich regelmäßig neu – Aufgeklapptes bleibt offen
+    det.addEventListener("toggle", () => { det.open ? openReasons.add(it.url) : openReasons.delete(it.url); });
+    det.append(el("summary", "", "Warum steht das hier?"));
+    const dl = el("dl");
+    for (const r of it.reasons) {
+      const dd = el("dd", "", r.text || "");
+      if (typeof r.value === "number") {
+        const meter = el("div", "meter"), bar = el("i");
+        bar.style.width = `${Math.max(0, Math.min(100, r.value * 10))}%`;
+        meter.append(bar);
+        dd.append(meter);
+      }
+      dl.append(el("dt", "", r.label || ""), dd);
+    }
+    det.append(dl);
+    text.append(det);
+  }
   li.append(text);
   return li;
+}
+function renderTopicFeeds() {
+  const feeds = status.topic_feeds || [], list = $("topic-feeds");
+  $("topics-card").hidden = !feeds.length;
+  list.replaceChildren();
+  for (const t of feeds) {
+    const li = el("li"), a = el("a", "", t.topic);
+    a.href = t.url;
+    a.title = t.url;
+    const copy = el("button", "btn", "Adresse kopieren");
+    copy.type = "button";
+    copy.hidden = !navigator.clipboard;
+    copy.addEventListener("click", async () => {
+      try { await navigator.clipboard.writeText(t.url); copy.textContent = "Kopiert ✓"; }
+      catch { copy.textContent = "Kopieren nicht möglich"; }
+      setTimeout(() => { copy.textContent = "Adresse kopieren"; }, 2000);
+    });
+    const name = el("span", "name");
+    name.append(a, el("span", "count", `${t.count} Artikel`));
+    li.append(name, copy);
+    list.append(li);
+  }
 }
 function renderDigest() {
   const d = status.latest, body = $("digest-body");
@@ -787,9 +850,8 @@ function renderDigest() {
     $("digest-h").textContent = `Digest vom ${d.date}`;
     const n = (f) => d.items.filter(f).length;
     const seen = n((it) => it.read && !it.clicked), clicked = n((it) => it.clicked), starred = n((it) => it.starred);
-    const up = n((it) => it.up), down = n((it) => it.down);
-    const parts = [seen && `${seen} angelesen`, clicked && `${clicked} angeklickt`, starred && `${starred} mit Stern`,
-                   up && `${up} × 👍`, down && `${down} × 👎`].filter(Boolean);
+    const parts = [seen && `${seen} angelesen`, clicked && `${clicked} angeklickt`, starred && `${starred} mit Stern`]
+      .filter(Boolean);
     $("digest-note").textContent = `${d.items.length} von ${d.considered ?? "?"} Artikeln ausgewählt`
       + (parts.length ? `, davon ${parts.join(", ")}` : "") + `. ${status.digest_count} Digests im Feed.`;
     let group = null, list = null;
@@ -981,6 +1043,7 @@ async function pollStatus() {
     renderRuns();
     renderPrivacy();
     renderDigest();
+    renderTopicFeeds();
     renderScores();
     if (first || status.running || wasRunning) renderLog();
     setConn(true);
@@ -993,6 +1056,12 @@ async function pollStatus() {
 let reportText = "";
 document.querySelectorAll(".report-tabs [data-report]").forEach((b) => b.addEventListener("click", async () => {
   const out = $("report-out"), note = $("report-note"), copy = $("report-copy");
+  if (b.dataset.confirm && b.dataset.armed !== "1") {  // kostet einen LLM-Aufruf und schickt Titel raus: erst nachfragen
+    b.dataset.armed = "1";
+    note.textContent = b.dataset.confirm;
+    return;
+  }
+  delete b.dataset.armed;
   document.querySelectorAll(".report-tabs [data-report]").forEach((x) => x.setAttribute("aria-pressed", x === b));
   document.querySelectorAll(".report-tabs [data-report]").forEach((x) => { x.disabled = true; });
   note.textContent = `${b.textContent}: wird berechnet …`;

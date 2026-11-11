@@ -2,6 +2,8 @@
 from __future__ import annotations
 
 import hashlib
+import json
+import re
 from datetime import datetime, timezone
 from html import escape
 from xml.etree import ElementTree as ET
@@ -57,17 +59,7 @@ def _item_html(it: dict, with_header: bool = True, s: Settings | None = None) ->
     excerpt = f'<p>{escape(it.get("excerpt") or "")}</p>' if it.get("excerpt") else ""
     return (f'{head}{why}{excerpt}'
             f'<p><small>{meta}{orig_html}</small></p>'
-            f'<p><a href="{url}">→ Zum Artikel</a>{_votes(it, s)}</p>{_pixel(it, s)}')
-
-
-def _votes(it: dict, s: Settings | None) -> str:
-    """👍/👎 hinter dem Link – eindeutiges Signal, auch negativ."""
-    if s is None or not s.vote_links or not it.get("entry_id"):
-        return ""
-    from .feedback import vote_url
-    up = escape(vote_url(s.feed_base, it["entry_id"], "up"), quote=True)
-    down = escape(vote_url(s.feed_base, it["entry_id"], "down"), quote=True)
-    return f' &nbsp;·&nbsp; <a href="{up}">👍 mehr davon</a> &nbsp;·&nbsp; <a href="{down}">👎 weniger davon</a>'
+            f'<p><a href="{url}">→ Zum Artikel</a></p>{_pixel(it, s)}')
 
 
 def _pixel(it: dict, s: Settings | None) -> str:
@@ -136,23 +128,90 @@ def write_feed(s: Settings, digests: list[dict]) -> None:
             _el(e, "content", _digest_html(d, s), type="html")
         else:
             for it in d["items"]:
-                e = _el(root, "entry")
-                mark = "🎲 Zufallsfund: " if it.get("explore") else "↓ " if it.get("filler") else ""
-                _el(e, "title", mark + (it.get("digest_title") or it["title"]))
-                _el(e, "id", _uid(s.feed_url, it["url"]))
-                _el(e, "updated", d["generated_at"])
-                _el(e, "published", d["generated_at"])
-                _el(e, "link", rel="alternate", href=_link(it, s))
-                a = _el(e, "author")
-                _el(a, "name", it.get("feed") or _host(it["url"]))
-                if it.get("topic"):
-                    _el(e, "category", term=it["topic"])
-                _el(e, "summary", " ".join(x for x in (
-                    f"Warum lesen: {it['why']}" if it.get("why") else "", it.get("excerpt") or "") if x))
-                _el(e, "content", _item_html(it, with_header=False, s=s), type="html")
+                _item_entry(root, s, d, it, s.feed_url)
 
-    out = s.data_dir / "feed.xml"
+    _write(root, s.data_dir / "feed.xml")
+    write_topic_feeds(s, digests)
+
+
+def _item_entry(root, s: Settings, d: dict, it: dict, feed_url: str) -> None:
+    """Ein Feed-Eintrag pro Artikel (FEED_MODE=items und Themenfeeds)."""
+    e = _el(root, "entry")
+    mark = "🎲 Zufallsfund: " if it.get("explore") else "↓ " if it.get("filler") else ""
+    _el(e, "title", mark + (it.get("digest_title") or it["title"]))
+    _el(e, "id", _uid(feed_url, it["url"]))
+    _el(e, "updated", d["generated_at"])
+    _el(e, "published", d["generated_at"])
+    _el(e, "link", rel="alternate", href=_link(it, s))
+    a = _el(e, "author")
+    _el(a, "name", it.get("feed") or _host(it["url"]))
+    for term in dict.fromkeys(x for x in (it.get("interest_topic"), it.get("topic")) if x):
+        _el(e, "category", term=term)
+    _el(e, "summary", " ".join(x for x in (
+        f"Warum lesen: {it['why']}" if it.get("why") else "", it.get("excerpt") or "") if x))
+    _el(e, "content", _item_html(it, with_header=False, s=s), type="html")
+
+
+def _write(root, out) -> None:
     out.parent.mkdir(parents=True, exist_ok=True)
     tmp = out.with_suffix(".tmp")
     ET.ElementTree(root).write(tmp, encoding="utf-8", xml_declaration=True)
     tmp.replace(out)
+
+
+# ----------------------------------------------------------------------
+# Themenfeeds: ein Feed je Interessen-Thema, ein Eintrag pro Artikel
+# ----------------------------------------------------------------------
+_FOLD = str.maketrans({"ä": "ae", "ö": "oe", "ü": "ue", "ß": "ss", "é": "e", "è": "e", "á": "a", "à": "a"})
+
+
+def topic_slug(topic: str) -> str:
+    """"Künstliche Intelligenz" -> "kuenstliche-intelligenz" (für die Feed-Adresse)."""
+    return re.sub(r"[^a-z0-9]+", "-", topic.lower().translate(_FOLD)).strip("-")[:64]
+
+
+def topic_feed_url(s: Settings, slug: str) -> str:
+    return f"{s.feed_base}/topic/{slug}.xml"
+
+
+def write_topic_feeds(s: Settings, digests: list[dict]) -> list[dict]:
+    """Schreibt data/topics/<thema>.xml für jedes Interessen-Thema, das in den gespeicherten Digests
+    vorkommt, plus index.json für die Status-Seite. Feeds zu Themen ohne Artikel verschwinden wieder."""
+    by_slug: dict[str, dict] = {}
+    older: dict[str, str] | None = None  # Digests von vor den Themenfeeds: Thema aus dem Protokoll nachschlagen
+    for d in sorted(digests, key=lambda d: d["generated_at"], reverse=True):
+        for it in d["items"]:
+            if "interest_topic" not in it:
+                if older is None:
+                    from .feedback import read_jsonl
+                    older = {str(r.get("entry_id")): r["topic"] for r in read_jsonl(s.data_dir / "history.jsonl")
+                             if r.get("topic") and str(r["topic"]).lower() not in ("sonstiges", "other", "-")}
+                it = {**it, "interest_topic": older.get(str(it.get("entry_id")))}
+            topic = (it.get("interest_topic") or "").strip()
+            slug = topic_slug(topic)
+            if slug:
+                by_slug.setdefault(slug, {"topic": topic, "entries": []})["entries"].append((d, it))
+    folder = s.data_dir / "topics"
+    folder.mkdir(parents=True, exist_ok=True)
+    index = []
+    for slug, t in sorted(by_slug.items()):
+        url = topic_feed_url(s, slug)
+        root = ET.Element(f"{{{ATOM}}}feed")
+        _el(root, "title", f"{s.feed_title} – {t['topic']}")
+        _el(root, "subtitle", f"Alle Digest-Artikel zum Thema {t['topic']}")
+        _el(root, "id", _uid(url))
+        _el(root, "link", rel="self", href=url, type="application/atom+xml")
+        _el(root, "updated", t["entries"][0][0]["generated_at"])
+        _el(_el(root, "author"), "name", "feed-digestive")
+        _el(root, "generator", "feed-digestive")
+        for d, it in t["entries"]:
+            _item_entry(root, s, d, it, url)
+        _write(root, folder / f"{slug}.xml")
+        index.append({"topic": t["topic"], "slug": slug, "count": len(t["entries"])})
+    for old in folder.glob("*.xml"):
+        if old.stem not in by_slug:
+            old.unlink()
+    tmp = folder / "index.tmp"
+    tmp.write_text(json.dumps(index, ensure_ascii=False), encoding="utf-8")
+    tmp.replace(folder / "index.json")
+    return index

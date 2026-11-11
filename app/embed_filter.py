@@ -4,8 +4,8 @@ Statt ein Modell Fragen beantworten zu lassen, wird jeder Artikel in einen Vekto
 (fastembed, ~200 MB, Bruchteile einer Sekunde pro Artikel) und mit drei Dingen verglichen:
 
   Themen    die Stichpunkte unter "Hohe/Mittlere Priorität" in interests.md
-  Vorlieben deine gespeicherten Beispiele (examples.txt), Sterne, 👍 und angeklickte Digest-Artikel
-  Abneigung "Niedrige Priorität / eher nicht" in interests.md und 👎-Artikel
+  Vorlieben deine gespeicherten Beispiele (examples.txt), Sterne und angeklickte Digest-Artikel
+  Abneigung "Niedrige Priorität / eher nicht" in interests.md
 
 Daraus entstehen Merkmale wie bei Laya (topic_*, like, dislike). Wert, Themen-Mindestplätze,
 Kontrollstichprobe, Lernen aus Klicks und aus den LLM-Bewertungen funktionieren damit unverändert.
@@ -19,7 +19,7 @@ import logging
 import re
 from pathlib import Path
 
-from .feedback import read_jsonl, signals, votes
+from .feedback import read_jsonl, signals
 
 log = logging.getLogger(__name__)
 
@@ -115,9 +115,8 @@ class EmbedFilter:
         self.version = "emb-" + hashlib.sha1(anchor_text.encode()).hexdigest()[:10]
         self.legacy_version = self.version
         self.positives = self._positives(starred_entries or [])
-        self.negatives_fb = self._feedback_items("down")
-        log.info("Embedding-Vorfilter: %d Themen, %d positive Beispiele, %d Abneigungen (+%d 👎)",
-                 len(topics), len(self.positives), len(self.negatives), len(self.negatives_fb))
+        log.info("Embedding-Vorfilter: %d Themen, %d positive Beispiele, %d Abneigungen",
+                 len(topics), len(self.positives), len(self.negatives))
 
     # --- Anker ------------------------------------------------------------
     def _positives(self, starred_entries: list[dict]) -> list[str]:
@@ -132,14 +131,17 @@ class EmbedFilter:
         out = out[:MAX_EXAMPLES]
         for e in starred_entries[:300]:
             out.append(f"{e.get('title', '')}\n{html_to_text(e.get('content'))[:600]}")
-        out += self._feedback_items("positive")
+        out += self._feedback_items()
         return [t for t in out if t.strip()]
 
-    def _feedback_items(self, kind: str) -> list[str]:
-        """Texte gezeigter Digest-Artikel mit 👍/Stern/Klick ("positive") bzw. 👎 ("down")."""
+    def _feedback_items(self) -> list[str]:
+        """Texte gezeigter Digest-Artikel mit Stern oder Klick. Verblasste Signale (unter einem Viertel
+        ihres Gewichts, also älter als zwei Halbwertszeiten) zählen nicht mehr als Favorit."""
         rows = read_jsonl(self.s.data_dir / "feedback.jsonl")
-        ids = ({eid for eid, k in signals(rows).items() if k.keys() & {"up", "star", "click"}}
-               if kind == "positive" else {eid for eid, v in votes(rows).items() if v == "down"})
+        fresh = signals(rows, self.s.signal_half_life_days)
+        full = signals(rows)
+        ids = {eid for eid, k in fresh.items()
+               if any(kind in ("star", "click") and w >= 0.25 * full[eid][kind] for kind, w in k.items())}
         if not ids:
             return []
         try:
@@ -184,7 +186,7 @@ class EmbedFilter:
         X = np.vstack([it["_vec"] for it in items])
         T = self._vectors([t["question"] for t in self.spec["topics"].values()])
         P = self._vectors(self.positives)
-        N = self._vectors(self.negatives + self.negatives_fb)
+        N = self._vectors(self.negatives)
         st = X @ T.T
         sp = np.sort(X @ P.T, axis=1)[:, -POS_TOP:].mean(axis=1) if len(P) else np.zeros(len(items))
         sn = (X @ N.T).max(axis=1) if len(N) else np.zeros(len(items))

@@ -32,6 +32,14 @@ def _int(name: str, default: int) -> int:
     return int(_env(name, str(default)))
 
 
+def _float(name: str, default: float) -> float:
+    raw = _env(name, str(default)) or str(default)
+    try:
+        return float(raw.replace(",", "."))
+    except ValueError:
+        raise SystemExit(f"{name}={raw!r} ist keine Zahl")
+
+
 def _bool(name: str, default: bool) -> bool:
     return (_env(name, "true" if default else "false") or "").lower() in ("1", "true", "yes", "ja", "on")
 
@@ -98,11 +106,11 @@ class Settings:
     similar_min: float = 0.55
     # Rückmeldung / Lernen
     track_clicks: bool = True
-    vote_links: bool = True      # 👍/👎 unter jedem Artikel
+    signal_half_life_days: float = 30.0  # nach so vielen Tagen zählt ein Klick/Stern noch halb (0 = aus)
     read_signal: bool = False    # Lesestatus im Reader als Signal (nur ohne Wegsortieren sinnvoll)
     open_pixel: str = "off"      # off | log: unsichtbares Bild nur protokollieren (Messung)
     learn: bool = True
-    feedback_days: int = 3
+    feedback_days: int = 7
     star_poll_minutes: int = 15
     explore_slots: int = 1
     explore_min_regular: int = 4
@@ -120,6 +128,9 @@ class Settings:
     output_language: str = "Deutsch"
     feed_mode: str = "daily"  # daily | items
     feed_title: str = "Mein Tages-Digest"
+    ntfy_url: str = ""           # z. B. https://ntfy.sh/<zufälliger-name> – Nachricht, wenn der Digest fertig ist
+    ntfy_token: str = ""         # Zugriffstoken, falls das Thema geschützt ist
+    ntfy_details: bool = False   # Rubriken und Titel in die Nachricht (sonst nur die Zahl der Artikel)
     keep_days: int = 30
 
     # Zeitplan / Server
@@ -205,11 +216,11 @@ class Settings:
             group_topics=_bool("GROUP_TOPICS", True),
             similar_min=float(_env("SIMILAR_MIN", "0.55") or 0.55),
             track_clicks=_bool("TRACK_CLICKS", True),
-            vote_links=_bool("VOTE_LINKS", True),
+            signal_half_life_days=max(0.0, _float("SIGNAL_HALF_LIFE_DAYS", 30.0)),
             read_signal=_bool("READ_SIGNAL", False),
             open_pixel=(_env("OPEN_PIXEL", "off") or "off").lower(),
             learn=_bool("LEARN", True),
-            feedback_days=_int("FEEDBACK_DAYS", 3),
+            feedback_days=_int("FEEDBACK_DAYS", 7),
             star_poll_minutes=_int("STAR_POLL_MINUTES", 15),
             explore_slots=_int("EXPLORE_SLOTS", 1),
             explore_min_regular=_int("EXPLORE_MIN_REGULAR", 4),
@@ -223,6 +234,9 @@ class Settings:
             output_language=_env("OUTPUT_LANGUAGE", "Deutsch") or "Deutsch",
             feed_mode=(_env("FEED_MODE", "daily") or "daily").lower(),
             feed_title=_env("FEED_TITLE", "Mein Tages-Digest") or "Mein Tages-Digest",
+            ntfy_url=_env("NTFY_URL", "") or "",
+            ntfy_token=_env("NTFY_TOKEN", "") or "",
+            ntfy_details=_bool("NTFY_DETAILS", False),
             keep_days=_int("KEEP_DAYS", 30),
             digest_time=_env("DIGEST_TIME", "06:30") or "06:30",
             tz=_env("TZ", "Europe/Berlin") or "Europe/Berlin",

@@ -9,6 +9,7 @@
   python -m app opens-report [Tage]  Pixel-Messung auswerten (OPEN_PIXEL=log)
   python -m app laya-questions  Laya-Fragen aus interests.md erzeugen
   python -m app privacy-report [Tage]  was in den letzten Tagen an LLM-Anbieter ging
+  python -m app profile-suggest  Vorschlag für interests.md aus deinen Klicks und Sternen
 """
 from __future__ import annotations
 
@@ -26,7 +27,7 @@ from pathlib import Path
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from zoneinfo import ZoneInfo
 
-from . import audit, feedback, status
+from . import audit, feedback, notify, status
 from .config import Settings
 from .digest import run
 from .feed import write_feed
@@ -40,14 +41,17 @@ def _run_safely(s: Settings, source: str = "Zeitplan") -> bool:
     """Ein Lauf mit Sperre und Eintrag für die Status-Seite – auch für `run` aus der Shell."""
     try:
         with status.tracked(s, source):
-            run(s)
+            digest = run(s)
+        notify.digest_ready(s, digest)
         return True
     except status.RunBusy:
         log.warning("Lauf läuft bereits – übersprungen")
     except SystemExit as e:
         log.error("%s", e)
-    except Exception:
+        notify.run_failed(s, e)
+    except Exception as e:
         log.exception("Lauf fehlgeschlagen")
+        notify.run_failed(s, e)
     finally:
         reset_rate_limits()
     return False
@@ -81,7 +85,8 @@ def _next_run(s: Settings) -> datetime:
 # 1×1 transparentes GIF
 # Berichte, die die Status-Seite anzeigen kann: Name in der URL -> Befehl. Feste Liste, keine Eingaben
 # aus der Anfrage landen in der Kommandozeile.
-REPORTS = {"learn": ["learn"], "laya": ["laya-report"], "privacy": ["privacy-report"], "opens": ["opens-report"]}
+REPORTS = {"learn": ["learn"], "laya": ["laya-report"], "privacy": ["privacy-report"], "opens": ["opens-report"],
+           "profile": ["profile-suggest"]}
 _report_lock = threading.Lock()
 
 
@@ -111,6 +116,7 @@ def _make_handler(s: Settings):
     redirect_re = re.compile(rf"^{re.escape(prefix)}/r/([A-Za-z0-9_-]{{1,64}})$")
     status_path = f"{prefix}/status"
     vote_re = re.compile(rf"^{re.escape(prefix)}/v/([A-Za-z0-9_-]{{1,64}})/(up|down)$")
+    topic_re = re.compile(rf"^{re.escape(prefix)}/topic/([a-z0-9-]{{1,64}})\.xml$")
     pixel_re = re.compile(rf"^{re.escape(prefix)}/p/([A-Za-z0-9_-]{{1,64}})\.gif$")
     last_feed_fetch = [None]  # Zeitpunkt des letzten Feed-Abrufs, für die Pixel-Messung
 
@@ -124,6 +130,12 @@ def _make_handler(s: Settings):
             if path == s.feed_path and feed_file.exists():
                 last_feed_fetch[0] = time.monotonic()
                 return self._send(200, feed_file.read_bytes(), "application/atom+xml; charset=utf-8")
+            m = topic_re.match(path)
+            if m:  # Themenfeed – der Name kann nur Kleinbuchstaben, Ziffern und "-" enthalten
+                topic_file = s.data_dir / "topics" / f"{m.group(1)}.xml"
+                if topic_file.exists():
+                    return self._send(200, topic_file.read_bytes(), "application/atom+xml; charset=utf-8")
+                return self._send(404, b"unbekanntes Thema", "text/plain; charset=utf-8")
             # Status-Seite liegt wie der Feed hinter dem geheimen Pfad
             if path in (status_path, status_path + "/"):
                 return self._send(200, status.PAGE.read_bytes(), "text/html; charset=utf-8", cache=False)
@@ -139,9 +151,9 @@ def _make_handler(s: Settings):
             if path == status_path + "/logs":
                 q = dict(re.findall(r"(?:^|&)(after|gen)=(\d+)", query))
                 return self._json(status.read_log(s.data_dir, int(q.get("after", 0)), int(q.get("gen", 0))))
-            m = vote_re.match(path)
-            if m:
-                return self._vote(*m.groups())
+            if vote_re.match(path):  # Links aus alten Digests, die der Reader noch gespeichert hat
+                return self._send(410, "👍/👎 gibt es nicht mehr. Was zählt: „Zum Artikel“ antippen "
+                                       "oder im Reader einen Stern setzen.".encode(), "text/plain; charset=utf-8")
             m = pixel_re.match(path)
             if m:
                 if self.command == "GET" and s.open_pixel == "log" and feedback.lookup_url(s.data_dir, m.group(1)):
@@ -160,25 +172,6 @@ def _make_handler(s: Settings):
             return self._send(404, b"not found", "text/plain")
 
         do_HEAD = do_GET
-
-        def _vote(self, entry_id, kind):
-            from html import escape
-            target = feedback.lookup_url(s.data_dir, entry_id)
-            if not target:
-                return self._send(404, b"unbekannter Artikel", "text/plain; charset=utf-8")
-            title = feedback.lookup_title(s.data_dir, entry_id) or target
-            if self.command == "GET" and feedback.is_human(self.headers.get("User-Agent"), self.headers):
-                feedback.record_vote(s.data_dir, entry_id, kind, day_only=s.privacy == "strict")
-            other = "down" if kind == "up" else "up"
-            text = "👍 Notiert: mehr davon." if kind == "up" else "👎 Notiert: weniger davon."
-            undo = "👎 doch lieber weniger" if kind == "up" else "👍 doch lieber mehr"
-            page = (f'<!doctype html><meta charset="utf-8"><meta name="viewport" content="width=device-width">'
-                    f'<title>Danke</title><body style="font:17px system-ui;max-width:32em;margin:3em auto;padding:0 1em">'
-                    f'<p style="font-size:1.4em">{text}</p><p>„{escape(title)}“</p>'
-                    f'<p><a href="{escape(feedback.vote_url(s.feed_base, entry_id, other), quote=True)}">{undo}</a>'
-                    f' &nbsp;·&nbsp; <a href="{escape(feedback.tracked_url(s.feed_base, entry_id) if s.track_clicks else target, quote=True)}">→ Zum Artikel</a></p>'
-                    f'<p style="color:#888">Du kannst dieses Fenster schließen.</p>')
-            return self._send(200, page.encode(), "text/html; charset=utf-8", cache=False)
 
         def _redirect(self, target):
             self.send_response(302)
@@ -302,6 +295,9 @@ def check(s: Settings) -> None:
                   "Denkmodus nicht abschalten lässt. Das kostet Ausgabe-Token und kann Antworten abschneiden.")
         else:
             print(f"✓ {stage}: {llm} antwortet: {answer.strip()[:40]!r}")
+    if s.ntfy_url:
+        ok = notify.send(s, "feed-digestive: Test", "Die Benachrichtigung funktioniert.", tags=["white_check_mark"])
+        print("✓ ntfy: Testnachricht gesendet" if ok else "✗ ntfy: Testnachricht nicht zugestellt (siehe Meldung oben)")
     print(f"Feed-URL: {s.feed_url}")
 
 
@@ -336,7 +332,7 @@ def main() -> None:
             topics, _ = parse_interests(imd.read_text(encoding="utf-8") if imd.exists() else "")
             labels = {f"topic_{k}": "Thema " + v["label"] for k, v in topics.items()}
             labels.update({"like": "Ähnlich zu deinen Favoriten", "dislike": "Ähnlich zu Abgelehntem"})
-        print(describe(s.data_dir, s.feedback_days, labels))
+        print(describe(s.data_dir, s.feedback_days, labels, s.signal_half_life_days))
         from .learn import describe_llm
         print()
         print(describe_llm(s.data_dir, labels))
@@ -349,6 +345,9 @@ def main() -> None:
     elif cmd == "privacy-report":
         days = int(sys.argv[2]) if len(sys.argv) > 2 and sys.argv[2].isdigit() else 30
         print(audit.report(s.data_dir, days))
+    elif cmd == "profile-suggest":
+        from .profile_suggest import suggest
+        print(suggest(s))
     elif cmd == "laya-report":
         from .laya_report import report
         print(report(s.data_dir, s.config_dir))

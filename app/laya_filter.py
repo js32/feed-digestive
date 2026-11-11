@@ -219,8 +219,9 @@ def apply_prefilter(items: list[dict], flt: LayaFilter, keep: int, min_value: fl
     ranked = sorted(items, key=lambda it: -it["prefilter"])
     kept, ids = [], set()
 
-    def take(it) -> bool:
+    def take(it, via: str = "score") -> bool:
         if it["id"] not in ids and len(kept) < keep:
+            it["prefilter_via"] = via  # für "Warum steht das hier?"
             kept.append(it)
             ids.add(it["id"])
             return True
@@ -249,7 +250,7 @@ def apply_prefilter(items: list[dict], flt: LayaFilter, keep: int, min_value: fl
                     break
                 if it["id"] in ids:
                     continue
-                if take(it) is not False:
+                if take(it, "topic:" + flt.spec["topics"][key.removeprefix("topic_")].get("label", key)) is not False:
                     quota += 1
                     got += 1
     for it in ranked:
@@ -259,11 +260,12 @@ def apply_prefilter(items: list[dict], flt: LayaFilter, keep: int, min_value: fl
     for it in ranked:
         if len(kept) >= min(min_keep, keep):
             break
-        take(it)
+        take(it, "fill")
     rest = [it for it in ranked if it["id"] not in ids]
     sample = random.sample(rest, min(explore, len(rest))) if explore > 0 else []
     for it in sample:
         it["laya_explore"] = True
+        it["prefilter_via"] = "explore"
         kept.append(it)
     _log_topics(flt, items, kept)
     log.info("Vorfilter: %d von %d Artikeln behalten (%d über Themen-Mindestplätze, %d zur Kontrolle "

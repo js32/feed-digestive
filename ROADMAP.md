@@ -44,14 +44,23 @@ The goal is to send as little about *you* as possible.
 - [x] "Similar to your starred article …" next to each suggestion
 - [x] Scoring prompt with a calibrated scale and article length; "why read" without template phrases
 - [x] `python -m app laya-report`: which Laya questions help, overlap, and where Laya and the LLM disagree
-- [ ] Interest profile export: topic clusters + keywords from your stars as TOML/CSV
-      (`python -m app profile`), optionally suggesting new `laya_questions.json` topics
+- [x] **"Warum steht das hier?"** per article on the status page: selection path, score and reason, topic,
+      pre-filter value and how the article got through, similarity to a star
+- [x] **Topic feeds:** one feed per topic of your profile (`/<token>/topic/<topic>.xml`)
+- [x] **Profile suggestion** (`profile-suggest`): a readable proposal for `interests.md` from clicks and
+      stars – never applied automatically
+- [ ] Profile suggestion also proposes new `laya_questions.json` topics
 - [x] Embeddings as learning features, so learning from clicks works without Laya (`PREFILTER=embeddings`)
 
 ## Performance
 
+Laya stays the core pre-filter – a local model that answers readable questions about each article is
+what sets this project apart. Embeddings stay as the light alternative for small servers. That makes
+Laya's speed and memory use the open issue:
+
 - [ ] **Laya via ONNX Runtime** (`LAYA_BACKEND=onnx`, same fp32 weights, identical answers, ~1.45× faster on CPU
-      per Laya's authors) – implemented on branch `onnx`, merged once tested on a real checkpoint
+      per Laya's authors) – implemented on branch `onnx`; the export failed on a full disk and has not been
+      tested on a real checkpoint yet. Next step: export with enough free disk space, compare answers, merge
 - [ ] int4 weight-only variant as an option, checked against your own data with `laya-export --check`
       (int8 dropped: Laya's authors measured a real accuracy loss)
 - [x] Laya learns its weights from the LLM scores, plus control sample and seats per topic
@@ -61,7 +70,10 @@ The goal is to send as little about *you* as possible.
 
 ## Learning
 
-- [x] 👍/👎 links per article; weighted signals (👍 2.0, ★ 1.5, click 1.0, read 0.3, 👎 −2.0)
+- [x] Weighted signals (★ 1.5, click 1.0, read 0.3); "shown, but left alone" as the negative example
+- [x] **Signals fade** (`SIGNAL_HALF_LIFE_DAYS`, default 30): old clicks and stars count less and less
+- [x] 👍/👎 links removed again (v1.1 had them): readers that load the full article dropped them, and
+      "shown, but left alone" covers the negative side without a tap
 - [x] Optional "read in the reader" signal (`READ_SIGNAL`, Miniflux)
 - [ ] Decide on `OPEN_PIXEL` after a week of measurements: use it as a signal or drop it
 - [ ] "Read" signal for Google Reader API sources
@@ -77,8 +89,9 @@ The goal is to send as little about *you* as possible.
 - [x] Reports (`learn`, `laya-report`, `privacy-report`, `opens-report`) on the status page
 - [x] `PRESET=small-server | laya | api-only` instead of a dozen single settings
 - [x] Pinned Laya dependencies (`constraints-laya.txt`), `.dockerignore` keeps `data/` out of the build
-- [ ] Once it's clear whether Laya or embeddings wins in daily use: simplify the other path, drop branch `onnx` if
-      Laya goes
+- [x] Push message via ntfy when a digest is ready or a run fails (`NTFY_URL`)
+- [ ] After a few weeks of use: check in the "Gelernt" report whether learning from clicks and stars has a
+      measurable effect; if not, replace it with the profile suggestion as the only path from signals to selection
 
 ## Sources
 

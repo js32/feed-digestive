@@ -6,13 +6,16 @@ dass du einen Artikel anklickst oder markierst.
 
 Labels:
   1    Interesse gezeigt – gewichtet nach dem stärksten Signal: im Reader angelesen 0,3,
-       „Zum Artikel“ geklickt 1,0, Stern 1,5, 👍 2,0 (feedback.SIGNAL_WEIGHTS)
-  0    👎 „weniger davon“ – Gewicht 2,0, schlägt alle anderen Signale
+       „Zum Artikel“ geklickt 1,0, Stern 1,5 (feedback.SIGNAL_WEIGHTS)
   0    im Digest gezeigt, aber nach FEEDBACK_DAYS weder geklickt noch markiert
   0    nie gezeigt und nie markiert – nur mit kleinem Gewicht (unbekannt ≠ uninteressant)
 
+Alle Beispiele verblassen mit dem Alter (SIGNAL_HALF_LIFE_DAYS, Standard 30 Tage): nach einer
+Halbwertszeit zählen sie halb, nach zwei ein Viertel. So folgt das Modell Interessen, die sich
+verschieben, und alte Klicks bestimmen nicht ewig mit.
+
 Der gelernte Wert wird mit der Formel aus laya_filter gemischt; der Anteil wächst mit der
-Zahl der positiven Rückmeldungen (gewichtet, max. 80 %).
+Zahl der positiven Rückmeldungen (gewichtet und verblasst, max. 80 %).
 """
 from __future__ import annotations
 
@@ -22,7 +25,7 @@ import math
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
-from .feedback import DOWN_WEIGHT, read_jsonl, signals, votes
+from .feedback import fade, read_jsonl, signals
 
 log = logging.getLogger(__name__)
 
@@ -48,23 +51,23 @@ def current_history(data_dir: Path) -> list[dict]:
     return [r for r in history if set(r["features"]) == keys and version(r) == ver]
 
 
-def build_dataset(data_dir: Path, feedback_days: int) -> tuple[list[dict], list[int], list[float], dict]:
+def build_dataset(data_dir: Path, feedback_days: int, half_life_days: float = 0,
+                  now: datetime | None = None) -> tuple[list[dict], list[int], list[float], dict]:
     history = current_history(data_dir)
     fb = read_jsonl(data_dir / "feedback.jsonl")
-    sig, vote = signals(fb), votes(fb)
-    settle = (datetime.now(timezone.utc) - timedelta(days=feedback_days)).isoformat()
+    now = now or datetime.now(timezone.utc)
+    sig = signals(fb, half_life_days, now)
+    settle = (now - timedelta(days=feedback_days)).isoformat()
 
     # pro Artikel nur der jüngste Protokolleintrag
     latest: dict[int, dict] = {}
     for r in history:
         latest[str(r["entry_id"])] = r
     X, y, w = [], [], []
-    stats = {"pos": 0, "pos_weight": 0.0, "read": 0, "click": 0, "star": 0, "up": 0, "down": 0,
-             "neg_shown": 0, "neg_unshown": 0}
+    stats = {"pos": 0, "pos_weight": 0.0, "read": 0, "click": 0, "star": 0,
+             "neg_shown": 0, "neg_unshown": 0, "half_life_days": half_life_days}
     for eid, r in latest.items():
-        if vote.get(eid) == "down":
-            X.append(r["features"]); y.append(0); w.append(DOWN_WEIGHT); stats["down"] += 1
-        elif eid in sig:
+        if eid in sig:
             kinds = sig[eid]
             weight = max(kinds.values())
             X.append(r["features"]); y.append(1); w.append(weight)
@@ -74,9 +77,11 @@ def build_dataset(data_dir: Path, feedback_days: int) -> tuple[list[dict], list[
         elif r.get("ts", "") > settle:
             continue  # noch zu frisch, vielleicht klickst du ja noch
         elif r.get("shown"):
-            X.append(r["features"]); y.append(0); w.append(1.0); stats["neg_shown"] += 1
+            X.append(r["features"]); y.append(0); w.append(fade(r.get("ts"), half_life_days, now))
+            stats["neg_shown"] += 1
         else:
-            X.append(r["features"]); y.append(0); w.append(UNSHOWN_WEIGHT); stats["neg_unshown"] += 1
+            X.append(r["features"]); y.append(0); w.append(UNSHOWN_WEIGHT * fade(r.get("ts"), half_life_days, now))
+            stats["neg_unshown"] += 1
     return X, y, w, stats
 
 
@@ -123,9 +128,9 @@ class Learner:
         return round((1 - self.alpha) * formula_value + self.alpha * 10 * self.prob(features), 2)
 
 
-def retrain(data_dir: Path, feedback_days: int) -> Learner:
-    X, y, w, stats = build_dataset(data_dir, feedback_days)
-    neg = stats["neg_shown"] + stats["neg_unshown"] + stats["down"]
+def retrain(data_dir: Path, feedback_days: int, half_life_days: float = 0) -> Learner:
+    X, y, w, stats = build_dataset(data_dir, feedback_days, half_life_days)
+    neg = stats["neg_shown"] + stats["neg_unshown"]
     path = data_dir / "learned_weights.json"
     if stats["pos_weight"] < MIN_POS or neg < MIN_NEG:
         log.info("Lernen: noch zu wenig Rückmeldung (%.1f positiv gewichtet, %d negativ; nötig %d/%d) – nur Formel",
@@ -137,20 +142,21 @@ def retrain(data_dir: Path, feedback_days: int) -> Learner:
     tmp.write_text(json.dumps(model, ensure_ascii=False, indent=1), encoding="utf-8")
     tmp.replace(path)
     learner = Learner(model, stats["pos_weight"])
-    log.info("Lernen: Modell aus %d positiven (%d 👍, %d Stern, %d geklickt, %d angelesen) / %d negativen "
-             "(%d 👎) Beispielen, Anteil am Wert %.0f %%", stats["pos"], stats["up"], stats["star"], stats["click"],
-             stats["read"], neg, stats["down"], learner.alpha * 100)
+    log.info("Lernen: Modell aus %d positiven (%d Stern, %d geklickt, %d angelesen; verblasst gewichtet %.1f) / "
+             "%d negativen Beispielen, Anteil am Wert %.0f %%", stats["pos"], stats["star"], stats["click"],
+             stats["read"], stats["pos_weight"], neg, learner.alpha * 100)
     return learner
 
 
-def describe(data_dir: Path, feedback_days: int, labels: dict[str, str]) -> str:
+def describe(data_dir: Path, feedback_days: int, labels: dict[str, str], half_life_days: float = 0) -> str:
     """Lesbare Übersicht für `python -m app learn`."""
-    learner = retrain(data_dir, feedback_days)
-    X, y, w, stats = build_dataset(data_dir, feedback_days)
-    lines = [f"Rückmeldungen: {stats['pos']} positiv ({stats['up']} 👍, {stats['star']} Stern, "
+    learner = retrain(data_dir, feedback_days, half_life_days)
+    X, y, w, stats = build_dataset(data_dir, feedback_days, half_life_days)
+    lines = [f"Rückmeldungen: {stats['pos']} positiv ({stats['star']} Stern, "
              f"{stats['click']} geklickt, {stats['read']} nur angelesen; gewichtet {stats['pos_weight']:.1f}), "
-             f"{stats['down']} 👎, "
-             f"{stats['neg_shown']} gezeigt ohne Klick, {stats['neg_unshown']} nie gezeigt"]
+             f"{stats['neg_shown']} gezeigt ohne Klick, {stats['neg_unshown']} nie gezeigt",
+             (f"Verblassen: ein Signal zählt nach {half_life_days:g} Tagen noch halb (SIGNAL_HALF_LIFE_DAYS)"
+              if half_life_days > 0 else "Verblassen: aus (SIGNAL_HALF_LIFE_DAYS=0) – alle Signale zählen voll")]
     if not learner.active:
         lines.append(f"Noch kein Modell – nötig sind mindestens {MIN_POS} positive und {MIN_NEG} negative Beispiele.")
         return "\n".join(lines)

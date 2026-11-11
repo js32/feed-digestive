@@ -71,10 +71,10 @@ def report(data_dir: Path, config_dir: Path) -> str:
         version is None or (r.get("laya_v") or legacy) == version)
     stale = sum(1 for r in rows if not fits(r))
     rows = [r for r in rows if fits(r)]
-    # nur deutliche Signale (Klick, Stern, 👍) – "angelesen" ist zu schwach für diesen Vergleich
+    # nur deutliche Signale (Klick, Stern) – "angelesen" ist zu schwach für diesen Vergleich
     from .feedback import signals
     positive = {eid for eid, k in signals(read_jsonl(data_dir / "feedback.jsonl")).items()
-                if k.keys() & {"click", "star", "up"}}
+                if k.keys() & {"click", "star"}}
     for r in rows:
         r["_pos"] = str(r["entry_id"]) in positive
     scored = [r for r in rows if isinstance(r.get("score"), (int, float))]
