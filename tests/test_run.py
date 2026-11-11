@@ -104,7 +104,7 @@ def test_run_notifies(run_env, env, monkeypatch):
     sent = []
     from app import __main__ as M
     from app import notify
-    monkeypatch.setattr(notify, "send", lambda s, title, message, **k: sent.append((title, message)) or True)
+    monkeypatch.setattr(notify, "send", lambda s, title, message, **k: sent.append((title, message)) or {})
     assert M._run_safely(s, "Test") is True
     assert sent and sent[0][0].endswith("6 Artikel")
     monkeypatch.setattr(M, "run", lambda s: (_ for _ in ()).throw(RuntimeError("kaputt")))

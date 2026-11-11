@@ -130,7 +130,8 @@ class Settings:
     feed_title: str = "Mein Tages-Digest"
     ntfy_url: str = ""           # z. B. https://ntfy.sh/<zufälliger-name> – Nachricht, wenn der Digest fertig ist
     ntfy_token: str = ""         # Zugriffstoken, falls das Thema geschützt ist
-    ntfy_details: bool = False   # Rubriken und Titel in die Nachricht (sonst nur die Zahl der Artikel)
+    bark_url: str = ""           # Bark (iPhone): die Adresse aus der App, z. B. https://api.day.app/<schlüssel>
+    notify_details: bool = False  # Rubriken und Titel in die Nachricht (sonst nur die Zahl der Artikel)
     keep_days: int = 30
 
     # Zeitplan / Server
@@ -236,7 +237,8 @@ class Settings:
             feed_title=_env("FEED_TITLE", "Mein Tages-Digest") or "Mein Tages-Digest",
             ntfy_url=_env("NTFY_URL", "") or "",
             ntfy_token=_env("NTFY_TOKEN", "") or "",
-            ntfy_details=_bool("NTFY_DETAILS", False),
+            bark_url=_env("BARK_URL", "") or "",
+            notify_details=_bool("NOTIFY_DETAILS", _bool("NTFY_DETAILS", False)),  # NTFY_DETAILS: alter Name
             keep_days=_int("KEEP_DAYS", 30),
             digest_time=_env("DIGEST_TIME", "06:30") or "06:30",
             tz=_env("TZ", "Europe/Berlin") or "Europe/Berlin",

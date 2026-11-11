@@ -22,8 +22,8 @@
 - **Topic feeds:** one feed per topic of your profile at `/<token>/topic/<topic>.xml`, listed on the status page.
   Older digests are filled in from the history. Topics are now also assigned without a pre-filter (from the
   bullets in `interests.md`), so `MAX_PER_TOPIC` works with `PREFILTER=none` too.
-- **ntfy** (`NTFY_URL`, `NTFY_TOKEN`, `NTFY_DETAILS`): push message when a digest is ready or a run fails; only
-  the number of articles unless `NTFY_DETAILS=true`. `check` sends a test message.
+- **Push messages** via ntfy (`NTFY_URL`, `NTFY_TOKEN`) and/or Bark for iPhone (`BARK_URL`) when a digest is
+  ready or a run fails; only the number of articles unless `NOTIFY_DETAILS=true`. `check` sends a test message.
 - nginx example: topic feeds passed through, `/v/` removed.
 - Roadmap: Laya stays the core pre-filter, embeddings the light alternative; ONNX is an open item again.
 

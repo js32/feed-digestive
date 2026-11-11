@@ -89,7 +89,7 @@ Laya's speed and memory use the open issue:
 - [x] Reports (`learn`, `laya-report`, `privacy-report`, `opens-report`) on the status page
 - [x] `PRESET=small-server | laya | api-only` instead of a dozen single settings
 - [x] Pinned Laya dependencies (`constraints-laya.txt`), `.dockerignore` keeps `data/` out of the build
-- [x] Push message via ntfy when a digest is ready or a run fails (`NTFY_URL`)
+- [x] Push message via ntfy or Bark when a digest is ready or a run fails (`NTFY_URL`, `BARK_URL`)
 - [ ] After a few weeks of use: check in the "Gelernt" report whether learning from clicks and stars has a
       measurable effect; if not, replace it with the profile suggestion as the only path from signals to selection
 

@@ -567,7 +567,8 @@ At most 3 articles per source feed are taken, unless that's needed to reach `MIN
 | `KEEP_DAYS` | `30` | How long digests stay in the feed. |
 | `NTFY_URL` | – | Address of an [ntfy](https://ntfy.sh) topic, e.g. `https://ntfy.sh/<long-random-name>` or your own server. Sends a push message when a digest is ready and when a run fails. `check` sends a test message. |
 | `NTFY_TOKEN` | – | Access token if the topic is protected. |
-| `NTFY_DETAILS` | `false` | Put section names and article titles into the message. Off by default: whoever knows the topic name can read along, so only the number of articles is sent. |
+| `BARK_URL` | – | The same via [Bark](https://github.com/Finb/Bark) (iPhone only): the address the app shows, e.g. `https://api.day.app/<key>`, or that of your own [bark-server](https://github.com/Finb/bark-server). Can be used together with `NTFY_URL`. |
+| `NOTIFY_DETAILS` | `false` | Put section names and article titles into the message. Off by default: the push service sees the message, so only the number of articles is sent. (`NTFY_DETAILS` still works as the old name.) |
 | `PUBLIC_URL` | `http://localhost:8080` | Public base URL as your reader sees it, e.g. `https://digest.example.org`. Used for feed and click links. |
 | `FEED_TOKEN` | – | Secret path segment: the feed lives at `PUBLIC_URL/FEED_TOKEN/feed.xml`. Generate with `openssl rand -hex 16`. |
 
@@ -657,9 +658,10 @@ memory/CPU limits (`DIGEST_MEM_LIMIT`, `DIGEST_CPUS`).
 
 - **Stays on your server:** your reading history, clicks, stars, the learned models and,
   with a pre-filter, the pre-sorting of all articles.
-- **Goes to ntfy, only if you set `NTFY_URL`:** the date and the number of articles of a new digest,
-  or the fact that a run failed. Section names and titles only with `NTFY_DETAILS=true`. Use your own
-  ntfy server or a protected topic if that matters to you.
+- **Goes to ntfy or Bark, only if you set `NTFY_URL` / `BARK_URL`:** the date and the number of
+  articles of a new digest, or the fact that a run failed. Section names and titles only with
+  `NOTIFY_DETAILS=true`. Use your own ntfy or Bark server if that matters to you; on an iPhone the
+  message passes through Apple's push service either way.
 - **Goes to your LLM provider:** titles, snippets and text of the articles being scored or
   summarised, plus your interest profile. With a pre-filter in front, that's ~40–60 instead of all
   articles. Use Ollama if nothing should leave your server.

@@ -295,9 +295,9 @@ def check(s: Settings) -> None:
                   "Denkmodus nicht abschalten lässt. Das kostet Ausgabe-Token und kann Antworten abschneiden.")
         else:
             print(f"✓ {stage}: {llm} antwortet: {answer.strip()[:40]!r}")
-    if s.ntfy_url:
-        ok = notify.send(s, "feed-digestive: Test", "Die Benachrichtigung funktioniert.", tags=["white_check_mark"])
-        print("✓ ntfy: Testnachricht gesendet" if ok else "✗ ntfy: Testnachricht nicht zugestellt (siehe Meldung oben)")
+    for name, ok in notify.send(s, "feed-digestive: Test", "Die Benachrichtigung funktioniert.").items():
+        print(f"✓ {name}: Testnachricht gesendet" if ok
+              else f"✗ {name}: Testnachricht nicht zugestellt (siehe Meldung oben)")
     print(f"Feed-URL: {s.feed_url}")
 
 
