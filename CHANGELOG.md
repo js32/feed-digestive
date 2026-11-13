@@ -1,5 +1,10 @@
 # Changelog
 
+## Unreleased
+
+- Fix: excerpts failed with `'list' object has no attribute 'get'` when the model wrapped its answer in a list
+  or the text contained square brackets and something after the JSON. Both are read correctly now.
+
 ## v1.2 – 2026-11-11
 
 Hardening, tests and a clearer view of why an article was picked: status page behind a password, signals that

@@ -64,3 +64,21 @@ def test_prefilter_records_how_an_item_got_through():
     assert via[3] == "topic:Philosophie"      # unter der Schwelle, aber das Thema bekommt seinen Platz
     assert via[1] == "topic:KI" and via[2] == "score" and via[4] == "score"
     assert sorted(via.values()).count("explore") == 1 and len(kept) == 5
+
+
+def test_summarize_accepts_object_wrapped_in_list():
+    from app.digest import summarize
+
+    class FakeLLM:
+        def __init__(self, answer):
+            self.answer = answer
+
+        def complete_json(self, *a, **k):
+            return self.answer
+
+    item = {"title": "Orig", "feed": "F", "url": "https://example.org", "text": "Text " * 200, "score_why": "Grund"}
+    out = summarize(dict(item), FakeLLM([{"title": "Neu", "excerpt": "Du erfährst.", "why": "Weil."}]), "", "Deutsch")
+    assert (out["digest_title"], out["excerpt"], out["why"]) == ("Neu", "Du erfährst.", "Weil.")
+    for broken in (["nur", "wörter"], [], "text", None):
+        out = summarize(dict(item), FakeLLM(broken), "", "Deutsch")  # fällt sauber auf den Originaltitel zurück
+        assert out["digest_title"] == "Orig" and out["why"] == "Grund"

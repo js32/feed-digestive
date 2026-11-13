@@ -243,7 +243,10 @@ def extract_json(text: str):
         return json.loads(text)
     except json.JSONDecodeError:
         pass
-    for open_c, close_c in (("[", "]"), ("{", "}")):
+    # Text um das JSON herum: mit der Klammer anfangen, die zuerst vorkommt. Sonst würde aus
+    # {"title": "…", "excerpt": "… [1] … [2]"} plus Nachsatz die Liste mitten im Text gefischt.
+    pairs = sorted((("[", "]"), ("{", "}")), key=lambda p: text.find(p[0]) if p[0] in text else len(text))
+    for open_c, close_c in pairs:
         start, end = text.find(open_c), text.rfind(close_c)
         if start != -1 and end > start:
             try:

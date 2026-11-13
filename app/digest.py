@@ -311,6 +311,10 @@ def summarize(item: dict, llm: LLM, profile: str, lang: str) -> dict:
             f"Text:\n{item['text'][:SUMMARY_INPUT_CHARS] or '(kein Text im Feed, nur Titel)'}")
     try:
         r = llm.complete_json(system, user, max_tokens=900, purpose="Auszug")
+        if isinstance(r, list):  # manche Modelle packen das Objekt in eine Liste: [{"title": …}]
+            r = next((x for x in r if isinstance(x, dict)), None)
+        if not isinstance(r, dict):
+            raise ValueError("Antwort ist kein JSON-Objekt mit title/excerpt/why")
         item["digest_title"] = str(r.get("title") or item["title"]).strip()
         item["excerpt"] = str(r.get("excerpt") or "").strip()
         item["why"] = str(r.get("why") or item.get("score_why", "")).strip()

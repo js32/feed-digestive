@@ -106,3 +106,10 @@ def test_extract_json(text, expected):
 def test_extract_json_fails_cleanly():
     with pytest.raises(ValueError):
         L.extract_json("")
+
+
+def test_extract_json_prefers_the_outer_object():
+    """Objekt mit eckigen Klammern im Text und einem Nachsatz: nicht die Liste aus der Mitte fischen."""
+    text = 'Hier das Ergebnis: {"title": "T", "excerpt": "Siehe [1] und [2]."} Ich hoffe, das hilft.'
+    assert L.extract_json(text) == {"title": "T", "excerpt": "Siehe [1] und [2]."}
+    assert L.extract_json('Antwort: [{"a": 1}] fertig') == [{"a": 1}]
