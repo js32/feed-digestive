@@ -278,7 +278,7 @@ details.raw .tbl th, details.raw .tbl td { padding-left: 0; padding-right: 16px;
   border-radius: 0 0 12px 12px;
   font: 12.5px/1.65 var(--mono);
 }
-#log .ln { display: grid; grid-template-columns: 5.4em minmax(0, 1fr); gap: 12px; padding: 0 24px; white-space: pre-wrap; word-break: break-word; }
+#log .ln { display: grid; grid-template-columns: 9.4em minmax(0, 1fr); gap: 12px; padding: 0 24px; white-space: pre-wrap; word-break: break-word; }
 #log .ln time { color: var(--code-muted); }
 #log .WARNING span { color: #fbbf24; }
 #log .ERROR, #log .CRITICAL { background: rgba(248, 113, 113, 0.12); }
@@ -951,7 +951,8 @@ function renderLog() {
   const frag = document.createDocumentFragment();
   for (const ln of shown) {
     const row = el("div", `ln ${ln.level}${WAIT.test(ln.msg) ? " wait" : ""}${starts.has(ln.n) ? " run-start" : ""}`);
-    const t = el("time", "", new Date(ln.t * 1000).toLocaleTimeString("de-DE"));
+    const when = new Date(ln.t * 1000);  // mit Datum: das Log reicht über mehrere Tage
+    const t = el("time", "", `${when.toLocaleDateString("de-DE", { day: "2-digit", month: "2-digit" })} ${when.toLocaleTimeString("de-DE")}`);
     t.title = new Date(ln.t * 1000).toLocaleString("de-DE");
     row.append(t, el("span", "", ln.msg));
     frag.append(row);
