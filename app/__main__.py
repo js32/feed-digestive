@@ -24,10 +24,11 @@ import threading
 import time
 from datetime import datetime, timedelta
 from pathlib import Path
+from urllib.parse import parse_qs
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from zoneinfo import ZoneInfo
 
-from . import audit, feedback, notify, status
+from . import audit, auth, feedback, notify, status
 from .config import Settings
 from .digest import run
 from .feed import write_feed
@@ -115,6 +116,9 @@ def _make_handler(s: Settings):
     prefix = f"/{s.feed_token}" if s.feed_token else ""
     redirect_re = re.compile(rf"^{re.escape(prefix)}/r/([A-Za-z0-9_-]{{1,64}})$")
     status_path = f"{prefix}/status"
+    # Cookie-Pfad: der geheime Ordner. "/<token>/status" allein würde /<token>/status.json nicht abdecken –
+    # Browser schicken ein Cookie nur für den Pfad selbst und für das, was mit "/" darunter liegt.
+    cookie_path = f"{prefix}/"
     vote_re = re.compile(rf"^{re.escape(prefix)}/v/([A-Za-z0-9_-]{{1,64}})/(up|down)$")
     topic_re = re.compile(rf"^{re.escape(prefix)}/topic/([a-z0-9-]{{1,64}})\.xml$")
     pixel_re = re.compile(rf"^{re.escape(prefix)}/p/([A-Za-z0-9_-]{{1,64}})\.gif$")
@@ -136,7 +140,17 @@ def _make_handler(s: Settings):
                 if topic_file.exists():
                     return self._send(200, topic_file.read_bytes(), "application/atom+xml; charset=utf-8")
                 return self._send(404, b"unbekanntes Thema", "text/plain; charset=utf-8")
-            # Status-Seite liegt wie der Feed hinter dem geheimen Pfad
+            # Status-Seite liegt wie der Feed hinter dem geheimen Pfad – und mit STATUS_PASSWORD hinter einer Anmeldung
+            if path == status_path or path.startswith((status_path + "/", status_path + ".")):
+                if path == status_path + "/logout":
+                    return self._logout()
+                if not self._signed_in():
+                    if path in (status_path, status_path + "/", status_path + "/login"):
+                        return self._send(200, auth.login_page(status_path + "/login"), "text/html; charset=utf-8",
+                                          cache=False)
+                    return self._send(401, b"nicht angemeldet", "text/plain; charset=utf-8", cache=False)
+                if path == status_path + "/login":
+                    return self._see_other(status_path)
             if path in (status_path, status_path + "/"):
                 return self._send(200, status.PAGE.read_bytes(), "text/html; charset=utf-8", cache=False)
             if path == status_path + ".json":
@@ -172,6 +186,47 @@ def _make_handler(s: Settings):
             return self._send(404, b"not found", "text/plain")
 
         do_HEAD = do_GET
+
+        def do_POST(self):  # noqa: N802 – nur die Anmeldung
+            path = self.path.partition("?")[0]
+            if not s.status_password or path != status_path + "/login":
+                return self._send(404, b"not found", "text/plain")
+            try:
+                length = int(self.headers.get("Content-Length") or 0)
+            except ValueError:
+                length = 0
+            if not 0 < length <= 4096:
+                return self._send(400, b"bad request", "text/plain")
+            form = parse_qs(self.rfile.read(length).decode("utf-8", "replace"), keep_blank_values=True)
+            if auth.locked():
+                return self._send(429, auth.login_page(status_path + "/login",
+                                  "Zu viele Fehlversuche. Bitte in zehn Minuten noch einmal."),
+                                  "text/html; charset=utf-8", cache=False)
+            if not auth.check_password((form.get("password") or [""])[0], s.status_password):
+                time.sleep(1)  # bremst Durchprobieren
+                log.warning("Status-Seite: Anmeldung mit falschem Passwort")
+                return self._send(401, auth.login_page(status_path + "/login", "Das Passwort stimmt nicht."),
+                                  "text/html; charset=utf-8", cache=False)
+            cookie = auth.set_cookie_header(auth.make_cookie(s.status_password, s.feed_token), cookie_path,
+                                            secure=s.public_url.startswith("https://"))
+            return self._see_other(status_path, cookie)
+
+        def _signed_in(self) -> bool:
+            return not s.status_password or auth.valid_cookie(
+                auth.cookie_from_header(self.headers.get("Cookie")), s.status_password, s.feed_token)
+
+        def _logout(self):
+            return self._see_other(status_path, auth.set_cookie_header(
+                "", cookie_path, secure=s.public_url.startswith("https://"), max_age=0))
+
+        def _see_other(self, target, cookie=None):
+            self.send_response(303)
+            self.send_header("Location", target)
+            if cookie:
+                self.send_header("Set-Cookie", cookie)
+            self.send_header("Cache-Control", "no-store")
+            self.send_header("Content-Length", "0")
+            self.end_headers()
 
         def _redirect(self, target):
             self.send_response(302)

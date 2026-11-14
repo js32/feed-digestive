@@ -325,6 +325,7 @@ def snapshot(s: Settings) -> dict:
         "feed_updated": (datetime.fromtimestamp(feed_file.stat().st_mtime, timezone.utc).isoformat()
                          if feed_file.exists() else None),
         "digest_count": len(digests),
+        "login": bool(s.status_password),
         "topic_feeds": [{**t, "url": f"{s.feed_base}/topic/{t['slug']}.xml"}
                         for t in _load(s.data_dir / "topics" / "index.json", [])],
         "privacy": {**_privacy(s), "preset": s.privacy},

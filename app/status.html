@@ -58,6 +58,8 @@ body {
 a { color: inherit; }
 :focus-visible { outline: 2px solid var(--brand); outline-offset: 2px; }
 svg.icon { width: 16px; height: 16px; flex: none; stroke: currentColor; fill: none; stroke-width: 1.6; stroke-linecap: round; stroke-linejoin: round; }
+.signout { margin: 24px 0 0; text-align: center; font-size: 13px; }
+.signout a { color: var(--text-3); }
 .wrap { max-width: 1200px; margin: 0 auto; padding: 32px 24px 48px; overflow-x: clip; }
 
 /* ---------- Kopf ---------- */
@@ -476,6 +478,7 @@ details.raw .tbl th, details.raw .tbl td { padding-left: 0; padding-right: 16px;
     </div>
     <div id="log" role="log" aria-live="off"></div>
   </section>
+  <p class="signout" id="signout" hidden><a href="#">Auf diesem Gerät abmelden</a></p>
 </div>
 <div id="tip" role="tooltip"></div>
 
@@ -1010,9 +1013,12 @@ function toggleHealth(b) {
 }
 $("recheck").addEventListener("click", () => loadHealth(true));
 
+$("signout").querySelector("a").href = `${base}/logout`;
+
 // ---------- Abruf ----------
 async function getJSON(path) {
   const r = await fetch(base + path, { cache: "no-store" });
+  if (r.status === 401) location.reload();  // Anmeldung abgelaufen: die Seite zeigt dann das Anmeldeformular
   if (!r.ok) throw new Error(`HTTP ${r.status}`);
   return r.json();
 }
@@ -1045,6 +1051,7 @@ async function pollStatus() {
     renderPrivacy();
     renderDigest();
     renderTopicFeeds();
+    $("signout").hidden = !status.login;
     renderScores();
     if (first || status.running || wasRunning) renderLog();
     setConn(true);

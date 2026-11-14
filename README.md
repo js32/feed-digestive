@@ -110,14 +110,10 @@ The first `check` downloads the local models into `data/` (embeddings ~220 MB, L
 (e.g. `certbot --nginx -d your.domain`) and reload nginx. Only the feed, the topic feeds and the click redirects
 are passed through, plus the status page (see below); everything else returns 404.
 
-The status page shows what you read, click and like, so the example protects it with a password
-on top of the secret path (the feed URL travels further than you'd think). Create the password file
-once – you'll be asked for the password:
-
-```bash
-printf "digest:$(openssl passwd -apr1)\n" | sudo tee /etc/nginx/feed-digestive.htpasswd
-sudo nginx -t && sudo systemctl reload nginx
-```
+The status page shows what you read and click, so give it a password on top of the secret path (the
+feed URL travels further than you'd think): set `STATUS_PASSWORD` in `.env`. The page then asks once
+and remembers the device for six months. The feed itself needs no login – your reader couldn't
+provide one.
 
 **Subscribe** to `https://your.domain/<FEED_TOKEN>/feed.xml` in your reader. The digest feed
 itself is automatically excluded from the next digest.
@@ -575,6 +571,7 @@ At most 3 articles per source feed are taken, unless that's needed to reach `MIN
 | `BARK_ICON` | project logo | Image shown with Bark messages: address of a PNG/JPG, `off` for Bark's own logo. Defaults to the project logo from the public GitHub repo – your iPhone loads it from there. |
 | `NOTIFY_DETAILS` | `false` | Put section names and article titles into the message. Off by default: the push service sees the message, so only the number of articles is sent. (`NTFY_DETAILS` still works as the old name.) |
 | `PUBLIC_URL` | `http://localhost:8080` | Public base URL as your reader sees it, e.g. `https://digest.example.org`. Used for feed and click links. |
+| `STATUS_PASSWORD` | – | Password for the status page. The page shows a login form and keeps the device signed in for six months (signed cookie, nothing stored on the server); a new password signs every device out. Eight wrong attempts lock the login for ten minutes. Empty = only the secret path protects the page. |
 | `FEED_TOKEN` | – | Secret path segment: the feed lives at `PUBLIC_URL/FEED_TOKEN/feed.xml`. Generate with `openssl rand -hex 16`. |
 
 ### Schedule
@@ -620,7 +617,7 @@ don't touch.
 **Berichte** – easier to read and copy on a phone than a long terminal output.
 
 **Status page:** `https://your.domain/<FEED_TOKEN>/status`, reachable via the secret path and, with
-the example nginx config, a password (see Installation). It shows:
+`STATUS_PASSWORD`, a login that keeps a device signed in for six months. It shows:
 
 - whether a run is in progress, in which stage and why it waits (e.g. a provider's rate limit); the
   browser tab title and icon show the state too
@@ -646,8 +643,10 @@ Scheduled runs and runs started with `docker compose exec … run` both show up;
 `data/status/` and survive restarts. Both kinds of run share a lock, so a manual run never
 overlaps with the scheduled one.
 
-If you set up nginx before this page existed or before it had a password, take the `/status`
-location from `deploy/nginx.conf.example` and create the password file as shown under Installation. To keep the page private instead, leave nginx alone and open it
+If you set up nginx before this page existed, take the `/status` location from
+`deploy/nginx.conf.example`. If you protected it with nginx's own password prompt (`auth_basic`, the
+way v1.2 described it), remove those two lines once `STATUS_PASSWORD` is set – iPhone Safari forgets
+that kind of login and asks again every time. To keep the page private instead, leave nginx alone and open it
 through an SSH tunnel: `ssh -N -L 8087:127.0.0.1:8087 user@server`, then
 `http://localhost:8087/<FEED_TOKEN>/status`.
 

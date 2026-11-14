@@ -36,12 +36,11 @@ server {
         proxy_set_header User-Agent $http_user_agent;
     }
     # Status-Seite mit Logs und Berichten: /<token>/status, /<token>/status.json, /<token>/status/…
-    # Zusätzlich mit Passwort geschützt – sie zeigt dein Leseverhalten, und die Feed-URL (mit Token)
-    # wandert leichter weiter als gedacht. Passwortdatei anlegen (Benutzername frei wählbar):
-    #   printf "digest:$(openssl passwd -apr1)\n" | sudo tee /etc/nginx/feed-digestive.htpasswd
+    # Sie zeigt dein Leseverhalten, und die Feed-URL (mit Token) wandert leichter weiter als gedacht –
+    # deshalb STATUS_PASSWORD in der .env setzen: Die App zeigt dann ein Anmeldeformular und merkt sich
+    # das Gerät für sechs Monate. (Das Passwortfenster von nginx, auth_basic, geht auch, aber Safari auf
+    # dem iPhone fragt dann bei jedem Öffnen neu.)
     location ~ ^/[A-Za-z0-9_-]+/status(\.json|/.*)?$ {
-        auth_basic           "feed-digestive";
-        auth_basic_user_file /etc/nginx/feed-digestive.htpasswd;
         proxy_pass http://127.0.0.1:8087;
         proxy_set_header Host $host;
     }

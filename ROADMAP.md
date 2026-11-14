@@ -85,7 +85,7 @@ Laya's speed and memory use the open issue:
 
 - [x] Automated tests (pytest, no models or network needed) and GitHub Actions on every push
 - [x] `deploy/update.sh`: update without killing a running digest
-- [x] Status page behind a password (nginx Basic Auth) on top of the secret path
+- [x] Status page behind a login (`STATUS_PASSWORD`, device stays signed in for six months) on top of the secret path
 - [x] Reports (`learn`, `laya-report`, `privacy-report`, `opens-report`) on the status page
 - [x] `PRESET=small-server | laya | api-only` instead of a dozen single settings
 - [x] Pinned Laya dependencies (`constraints-laya.txt`), `.dockerignore` keeps `data/` out of the build

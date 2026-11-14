@@ -131,6 +131,7 @@ class Settings:
     output_language: str = "Deutsch"
     feed_mode: str = "daily"  # daily | items
     feed_title: str = "Mein Tages-Digest"
+    status_password: str = ""    # Anmeldung für die Status-Seite (leer = nur der geheime Pfad schützt sie)
     ntfy_url: str = ""           # z. B. https://ntfy.sh/<zufälliger-name> – Nachricht, wenn der Digest fertig ist
     ntfy_token: str = ""         # Zugriffstoken, falls das Thema geschützt ist
     bark_url: str = ""           # Bark (iPhone): die Adresse aus der App, z. B. https://api.day.app/<schlüssel>
@@ -239,6 +240,7 @@ class Settings:
             output_language=_env("OUTPUT_LANGUAGE", "Deutsch") or "Deutsch",
             feed_mode=(_env("FEED_MODE", "daily") or "daily").lower(),
             feed_title=_env("FEED_TITLE", "Mein Tages-Digest") or "Mein Tages-Digest",
+            status_password=_env("STATUS_PASSWORD", "") or "",
             ntfy_url=_env("NTFY_URL", "") or "",
             ntfy_token=_env("NTFY_TOKEN", "") or "",
             bark_url=_env("BARK_URL", "") or "",

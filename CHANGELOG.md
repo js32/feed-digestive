@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+- **Login for the status page** (`STATUS_PASSWORD`): a form instead of the web server's password prompt, and a
+  signed cookie that keeps the device signed in for six months – iPhone Safari kept forgetting the Basic Auth
+  login and asked on every visit. Everything under `/status` is covered (page, data, logs, reports); eight wrong
+  attempts lock the login for ten minutes. The nginx example no longer uses `auth_basic`.
 - Status page: log lines show the date next to the time.
 - Fix: excerpts failed with `'list' object has no attribute 'get'` when the model wrapped its answer in a list
   or the text contained square brackets and something after the JSON. Both are read correctly now.
