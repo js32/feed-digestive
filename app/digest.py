@@ -139,6 +139,37 @@ def _norm_url(u: str) -> str:
     return f"{p.netloc.removeprefix('www.')}{p.path.rstrip('/')}?{q}"
 
 
+def already_shown(data_dir) -> tuple[set[str], set[str]]:
+    """Adressen und Titel aller Artikel, die schon in einem Digest standen (normalisiert).
+    Derselbe Artikel kommt oft über mehrere Feeds – beim Blog selbst und bei einem Aggregator wie
+    Hacker News. Jeder Feed-Eintrag hat eine eigene Kennung; ohne diesen Abgleich stünde die zweite
+    Fassung im nächsten Digest, sobald die erste gezeigt wurde."""
+    urls, titles = set(), set()
+    rows = [(r, r.get("ts", "")) for r in feedback.read_jsonl(data_dir / "history.jsonl") if r.get("shown")]
+    try:
+        for d in json.loads((data_dir / "digests.json").read_text(encoding="utf-8")):
+            rows += [(it, d.get("generated_at", "")) for it in d.get("items", [])]
+    except (FileNotFoundError, json.JSONDecodeError):
+        pass
+    # Gleicher Titel zählt nur zwei Wochen lang: Reihen wie "Links der Woche" heißen jedes Mal gleich
+    recent = (datetime.now(timezone.utc) - timedelta(days=SAME_TITLE_DAYS)).isoformat()
+    for r, ts in rows:
+        if r.get("url"):
+            urls.add(_norm_url(r["url"]))
+        if ts >= recent and _title_key(r.get("title")):
+            titles.add(_title_key(r.get("title")))
+    return urls, titles
+
+
+SAME_TITLE_DAYS = 14
+
+
+def _title_key(title: str | None) -> str:
+    """Titel für den Dublettenabgleich; leer, wenn er zu kurz oder nichtssagend ist."""
+    key = _norm_title(title or "")
+    return key if len(key) >= 12 and key != "ohnetitel" else ""
+
+
 def prepare(entries: list[dict], s: Settings, cutoff: datetime) -> list[dict]:
     own_host = urllib.parse.urlparse(s.public_url).netloc
     seen_urls, seen_titles, out = set(), set(), []
@@ -473,7 +504,10 @@ def _run(s: Settings, dry_run: bool = False) -> dict | None:
     # Wissen aus früheren Läufen: schon Gezeigtes raus, Bewertungen wiederverwenden
     cache = feedback.load_cache(s.data_dir)
     before = len(items)
-    items = [it for it in items if not cache.get(str(it["id"]), {}).get("shown")]
+    shown_urls, shown_titles = already_shown(s.data_dir)
+    items = [it for it in items if not cache.get(str(it["id"]), {}).get("shown")
+             and not (it["url"] and _norm_url(it["url"]) in shown_urls)
+             and _title_key(it["title"]) not in shown_titles]
     for it in items:
         c = cache.get(str(it["id"]))
         if c:

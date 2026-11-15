@@ -2,6 +2,9 @@
 
 ## Unreleased
 
+- Fix: an article that reaches you through two feeds (the blog itself and an aggregator like Hacker News)
+  could appear in two digests – each feed entry has its own id, and only the id was remembered as shown.
+  Now the address (for good) and the title (for two weeks) of every shown article are checked too.
 - **Login for the status page** (`STATUS_PASSWORD`): a form instead of the web server's password prompt, and a
   signed cookie that keeps the device signed in for six months – iPhone Safari kept forgetting the Basic Auth
   login and asked on every visit. Everything under `/status` is covered (page, data, logs, reports); eight wrong

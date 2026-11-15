@@ -16,7 +16,7 @@ class FakeSource:
 
     def fetch_unread(self, limit):
         now = datetime.now(timezone.utc).isoformat()
-        return [{"id": i, "title": f"{kind} Artikel {i}", "url": f"https://example.org/{i}", "feed_id": i,
+        return [{"id": i, "title": f"{kind} Artikel Nummer {i}", "url": f"https://example.org/{i}", "feed_id": i,
                  "feed_title": f"Feed {i}", "published_at": now, "content": "<p>" + "Text " * 80 + "</p>"}
                 for i, kind in enumerate(["KI", "KI", "KI", "KI", "Phil", "Phil", "Rest"], 1)]
 
@@ -110,3 +110,39 @@ def test_run_notifies(run_env, env, monkeypatch):
     monkeypatch.setattr(M, "run", lambda s: (_ for _ in ()).throw(RuntimeError("kaputt")))
     assert M._run_safely(s, "Test") is False
     assert sent[-1][0] == "Digest-Lauf fehlgeschlagen"
+
+
+def test_same_article_from_another_feed_is_not_shown_again(run_env, monkeypatch):
+    """Derselbe Artikel taucht später über einen zweiten Feed auf (andere Kennung): nicht noch einmal zeigen."""
+    s = run_env
+    first = D.run(s)
+    shown = first["items"][0]
+
+    class Again(FakeSource):
+        def fetch_unread(self, limit):
+            now = datetime.now(timezone.utc).isoformat()
+            def e(i, title, url):
+                return {"id": i, "title": title, "url": url, "feed_id": 99, "feed_title": "Aggregator",
+                        "published_at": now, "content": "<p>" + "Text " * 80 + "</p>"}
+            return [e(101, "Anderer Titel beim Aggregator", shown["url"] + "?utm_source=hn"),   # gleiche Adresse
+                    e(102, shown["title"].upper() + "!", "https://mirror.example/x"),         # gleicher Titel
+                    e(103, "KI Artikel ganz neu", "https://example.org/neu")]
+
+    monkeypatch.setattr(D, "make_source", lambda s: Again())
+    second = D.run(s)
+    assert [str(it["entry_id"]) for it in second["items"]] == ["103"]
+
+
+def test_recurring_titles_are_only_blocked_for_two_weeks(settings):
+    import json as _json
+    from datetime import timedelta
+    old = (datetime.now(timezone.utc) - timedelta(days=D.SAME_TITLE_DAYS + 1)).isoformat()
+    new = datetime.now(timezone.utc).isoformat()
+    rows = [{"entry_id": "1", "ts": old, "shown": True, "title": "Links der Woche im Überblick", "url": "https://a.example/1"},
+            {"entry_id": "2", "ts": new, "shown": True, "title": "Ein ganz neuer Artikeltitel", "url": "https://a.example/2"},
+            {"entry_id": "3", "ts": new, "shown": True, "title": "Kurz", "url": ""},
+            {"entry_id": "4", "ts": new, "shown": False, "title": "Nie gezeigter Artikel hier", "url": "https://a.example/4"}]
+    (settings.data_dir / "history.jsonl").write_text("".join(_json.dumps(r) + "\n" for r in rows))
+    urls, titles = D.already_shown(settings.data_dir)
+    assert urls == {D._norm_url("https://a.example/1"), D._norm_url("https://a.example/2")}
+    assert titles == {D._title_key("Ein ganz neuer Artikeltitel")}
