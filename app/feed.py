@@ -121,14 +121,22 @@ def write_feed(s: Settings, digests: list[dict]) -> None:
 
     for d in sorted(digests, key=lambda d: d["generated_at"], reverse=True):
         if s.feed_mode == "daily":
+            # Nachgeholtes bekommt einen eigenen Eintrag: Reader holen einen schon bekannten
+            # Tages-Eintrag nicht neu, ein angehängter Artikel bliebe dort unsichtbar
+            regular = {**d, "items": [it for it in d["items"] if not it.get("picked")]}
+            for it in d["items"]:
+                if it.get("picked"):
+                    _item_entry(root, s, d, it, s.feed_url)
+            if not regular["items"]:
+                continue
             e = _el(root, "entry")
-            _el(e, "title", f"Digest vom {d['date']} – {len(d['items'])} Artikel")
+            _el(e, "title", f"Digest vom {d['date']} – {len(regular['items'])} Artikel")
             _el(e, "id", _uid(s.feed_url, d["id"]))
             _el(e, "updated", d["generated_at"])
             _el(e, "published", d["generated_at"])
             # bewusst kein Artikel-Link: sonst zählt ein Crawler-Abruf als Klick
             _el(e, "link", rel="alternate", href=s.feed_url)
-            _el(e, "content", _digest_html(d, s), type="html")
+            _el(e, "content", _digest_html(regular, s), type="html")
         else:
             for it in d["items"]:
                 _item_entry(root, s, d, it, s.feed_url)
@@ -144,8 +152,9 @@ def _item_entry(root, s: Settings, d: dict, it: dict, feed_url: str) -> None:
             else "↑ " if it.get("picked") else "")
     _el(e, "title", mark + (it.get("digest_title") or it["title"]))
     _el(e, "id", _uid(feed_url, it["url"]))
-    _el(e, "updated", d["generated_at"])
-    _el(e, "published", d["generated_at"])
+    when = it.get("picked_at") or d["generated_at"]  # nachgeholt: erscheint als neuer Eintrag oben
+    _el(e, "updated", when)
+    _el(e, "published", when)
     _el(e, "link", rel="alternate", href=_link(it, s))
     a = _el(e, "author")
     _el(a, "name", it.get("feed") or _host(it["url"]))

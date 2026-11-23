@@ -383,7 +383,9 @@ deleted, so the model follows interests that shift. `0` turns fading off.
 - **Picked:** the status page lists the best articles that just missed the digest ("Knapp nicht
   drin"), each with an **"In den Digest"** button. One tap fetches the article from your reader,
   writes its title and excerpt like for the others and adds it to the newest digest in its own
-  section "Von dir nachgeholt" (marked ↑); the feed is updated right away. Needs the status page
+  section "Von dir nachgeholt" (marked ↑); the feed is updated right away. With `FEED_MODE=daily`
+  the article becomes an entry of its own – readers don't fetch a day's digest entry again once
+  they have it. Needs the status page
   login if you set `STATUS_PASSWORD`; doesn't work while a digest is being built. Articles far below
   the cut-off aren't listed – a star in your reader still counts for those.
 - **No explicit "less of this":** the 👍/👎 links of v1.1 are gone – readers that load the full

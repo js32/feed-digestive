@@ -165,3 +165,24 @@ def test_near_misses_carry_entry_id(server):
     status = c.get("/tok/status.json", headers=cookie).json()
     assert status["scores"]["near_misses"] == []
     assert status["latest"]["items"][-1]["picked"] is True
+
+
+def test_daily_feed_gets_a_separate_entry(setup, env):
+    """FEED_MODE=daily: der Tages-Eintrag ist im Reader schon bekannt und wird nicht neu geholt –
+    das Nachgeholte muss ein eigener, neuer Eintrag sein."""
+    import xml.etree.ElementTree as ET
+    env.setenv("FEED_MODE", "daily")
+    s = Settings.from_env()
+    from app.feed import write_feed
+    write_feed(s, _digests(s))
+    A = "{http://www.w3.org/2005/Atom}"
+    before = {e.find(f"{A}id").text: e for e in ET.parse(s.data_dir / "feed.xml").getroot().findall(f"{A}entry")}
+    item = P.pick(s, "42")
+    entries = ET.parse(s.data_dir / "feed.xml").getroot().findall(f"{A}entry")
+    new = [e for e in entries if e.find(f"{A}id").text not in before]
+    assert len(new) == 1 and new[0].find(f"{A}title").text == "↑ Ein Essay auf Deutsch"
+    assert new[0].find(f"{A}published").text == item["picked_at"]
+    assert entries[0] is not None and entries[0].find(f"{A}title").text.startswith("↑ ")  # neuester zuerst
+    day = [e for e in entries if e.find(f"{A}title").text.startswith("Digest vom 23.11.2026")][0]
+    assert day.find(f"{A}title").text.endswith("1 Artikel")          # Tages-Eintrag bleibt unverändert
+    assert "Ein Essay auf Deutsch" not in day.find(f"{A}content").text

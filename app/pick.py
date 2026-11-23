@@ -81,7 +81,8 @@ def _pick(s: Settings, entry_id: str) -> dict:
                                                    "nicht drin, du wolltest ihn trotzdem"})
     item = {"entry_id": it["id"], **{k: it.get(k) for k in (
         "digest_title", "title", "url", "feed", "author", "published", "score", "excerpt", "why",
-        "reading_time")}, "topic": SECTION, "interest_topic": topic, "picked": True, "reasons": reasons}
+        "reading_time")}, "topic": SECTION, "interest_topic": topic, "picked": True,
+        "picked_at": datetime.now(timezone.utc).isoformat(), "reasons": reasons}
 
     latest = max(digests, key=lambda d: d.get("generated_at", ""))
     latest["items"].append(item)
