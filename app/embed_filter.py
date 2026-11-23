@@ -141,7 +141,7 @@ class EmbedFilter:
         fresh = signals(rows, self.s.signal_half_life_days)
         full = signals(rows)
         ids = {eid for eid, k in fresh.items()
-               if any(kind in ("star", "click") and w >= 0.25 * full[eid][kind] for kind, w in k.items())}
+               if any(kind in ("star", "click", "pick") and w >= 0.25 * full[eid][kind] for kind, w in k.items())}
         if not ids:
             return []
         try:

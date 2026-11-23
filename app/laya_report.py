@@ -74,7 +74,7 @@ def report(data_dir: Path, config_dir: Path) -> str:
     # nur deutliche Signale (Klick, Stern) – "angelesen" ist zu schwach für diesen Vergleich
     from .feedback import signals
     positive = {eid for eid, k in signals(read_jsonl(data_dir / "feedback.jsonl")).items()
-                if k.keys() & {"click", "star"}}
+                if k.keys() & {"click", "star", "pick"}}
     for r in rows:
         r["_pos"] = str(r["entry_id"]) in positive
     scored = [r for r in rows if isinstance(r.get("score"), (int, float))]

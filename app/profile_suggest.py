@@ -71,7 +71,7 @@ def collect(s: Settings, now: datetime | None = None) -> tuple[list[tuple[float,
     titles = _titles(s)
     sig = signals(read_jsonl(s.data_dir / "feedback.jsonl"), s.signal_half_life_days, now)
     liked = sorted(((max(k.values()), titles[eid]) for eid, k in sig.items()
-                    if eid in titles and k.keys() & {"click", "star"}), reverse=True)[:MAX_LIKED]
+                    if eid in titles and k.keys() & {"click", "star", "pick"}), reverse=True)[:MAX_LIKED]
     settle = (now - timedelta(days=s.feedback_days)).isoformat()
     shown: dict[str, str] = {}
     for r in read_jsonl(s.data_dir / "history.jsonl"):

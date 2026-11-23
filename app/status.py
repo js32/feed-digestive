@@ -19,6 +19,7 @@ TAIL_LINES = 3000          # so viele Zeilen bekommt die Seite beim ersten Abruf
 HISTORY_RUNS = 30          # so viele Läufe merkt sich run.json für den Verlauf
 SCORE_DAYS = 7             # Zeitraum für die Score-Verteilung
 NEAR_MISS_DAYS = 2         # "Knapp nicht drin" aus so vielen Tagen
+NEAR_MISS_COUNT = 8        # so viele davon zeigen (jeder mit Knopf "In den Digest")
 PAGE = Path(__file__).with_name("status.html")
 
 _mu = threading.Lock()
@@ -282,9 +283,9 @@ def _scores(rows: list[dict]) -> dict:
         b["total"] += 1
         b["shown"] += eid in shown
     near = sorted((r for eid, r in latest.items() if eid not in shown and r["ts"] >= near_since),
-                  key=lambda r: (-r["score"], r["ts"]))[:5]
+                  key=lambda r: (-r["score"], r["ts"]))[:NEAR_MISS_COUNT]
     return {"buckets": buckets, "count": len(latest),
-            "near_misses": [{k: r.get(k) for k in ("title", "url", "feed", "score")} for r in near]}
+            "near_misses": [{k: r.get(k) for k in ("entry_id", "title", "url", "feed", "score")} for r in near]}
 
 
 def _reactions(rows: list[dict]) -> dict:
@@ -337,7 +338,7 @@ def snapshot(s: Settings) -> dict:
             "generated_at": latest.get("generated_at"),
             "considered": latest.get("considered"),
             "items": [{**{k: it.get(k) for k in ("digest_title", "title", "url", "feed", "score",
-                                                   "why", "topic", "explore", "filler", "similar_to",
+                                                   "why", "topic", "explore", "filler", "similar_to", "picked",
                                                    "interest_topic", "reasons")},
                        "read": str(it.get("entry_id")) in reactions["read"],
                        "clicked": str(it.get("entry_id")) in reactions["click"],

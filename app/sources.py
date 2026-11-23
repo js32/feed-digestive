@@ -52,6 +52,10 @@ class Source:
         """Alle ungelesenen Einträge, neueste zuerst, höchstens limit."""
         raise NotImplementedError
 
+    def entry(self, entry_id: str) -> dict | None:
+        """Einen Eintrag mit vollem Inhalt (normalisiert), None wenn es ihn nicht mehr gibt."""
+        return None
+
     def digest_reads(self, feed_path: str, limit: int = 300) -> list[dict] | None:
         """Einträge des eigenen Digest-Feeds, die im Reader gelesen wurden: [{"url", "changed_at"}].
         None = von dieser Quelle nicht unterstützt."""
@@ -81,6 +85,16 @@ class MinifluxSource(Source):
 
     def check(self) -> str:
         return self.mf.me().get("username", "?")
+
+    def entry(self, entry_id):
+        if not str(entry_id).isdigit():
+            return None
+        try:
+            return self._norm(self.mf._get(f"/entries/{int(entry_id)}"))
+        except httpx.HTTPStatusError as e:
+            if e.response.status_code == 404:
+                return None
+            raise
 
     def fetch_new(self, state, window_start):
         cats = [int(x) for x in self.s.category_ids if str(x).isdigit()]
@@ -224,6 +238,17 @@ class GReaderSource(Source):
             if not items or not cont:
                 break
         return out
+
+    def entry(self, entry_id):
+        if not self._auth:
+            self._login()
+        r = self.http.post(f"{self.base}/reader/api/0/stream/items/contents", params={"output": "json"},
+                           data={"i": f"tag:google.com,2005:reader/item/{entry_id}"})
+        if r.status_code in (400, 404):
+            return None
+        r.raise_for_status()
+        items = r.json().get("items") or []
+        return self._norm(items[0]) if items else None
 
     def check(self) -> str:
         info = self._get("user-info", output="json")

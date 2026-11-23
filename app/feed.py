@@ -43,6 +43,7 @@ def _item_html(it: dict, with_header: bool = True, s: Settings | None = None) ->
         f"{it['reading_time']} min" if it.get("reading_time") else "",
         f"Relevanz {it['score']}/10" if it.get("score") is not None else "",
         "aufgefüllt (unter MIN_SCORE)" if it.get("filler") else "",
+        "von dir nachgeholt" if it.get("picked") else "",
     ) if x)
     orig = it.get("title") or ""
     orig_html = (f'<br>Original: „{escape(orig)}“'
@@ -51,6 +52,8 @@ def _item_html(it: dict, with_header: bool = True, s: Settings | None = None) ->
         orig_html += f'<br>Ähnlich zu deinem Stern: „{escape(it["similar_to"])}“'
     if it.get("filler"):
         title = "↓ " + title
+    if it.get("picked"):
+        title = "↑ " + title
     if it.get("explore"):
         title = "🎲 Zufallsfund: " + title
     head = f'<h3><a href="{url}">{title}</a></h3>' if with_header else ""
@@ -137,7 +140,8 @@ def write_feed(s: Settings, digests: list[dict]) -> None:
 def _item_entry(root, s: Settings, d: dict, it: dict, feed_url: str) -> None:
     """Ein Feed-Eintrag pro Artikel (FEED_MODE=items und Themenfeeds)."""
     e = _el(root, "entry")
-    mark = "🎲 Zufallsfund: " if it.get("explore") else "↓ " if it.get("filler") else ""
+    mark = ("🎲 Zufallsfund: " if it.get("explore") else "↓ " if it.get("filler")
+            else "↑ " if it.get("picked") else "")
     _el(e, "title", mark + (it.get("digest_title") or it["title"]))
     _el(e, "id", _uid(feed_url, it["url"]))
     _el(e, "updated", d["generated_at"])

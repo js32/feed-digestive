@@ -2,6 +2,11 @@
 
 ## Unreleased
 
+- **"In den Digest"** on the status page: the best articles that just missed the digest ("Knapp nicht drin", now
+  up to 8) get a button that adds them to the newest digest by hand – with title and excerpt, in their own
+  section "Von dir nachgeholt" (↑), feed updated right away. Counts as the strongest learning signal (2.0, fades
+  like the others); also used by the embedding pre-filter, `laya-report` and the profile suggestion. Needs the
+  status page login, refuses while a run is active, never adds an article twice.
 - Fix: an article that reaches you through two feeds (the blog itself and an aggregator like Hacker News)
   could appear in two digests – each feed entry has its own id, and only the id was remembered as shown.
   Now the address (for good) and the title (for two weeks) of every shown article are checked too.

@@ -24,7 +24,7 @@ import threading
 import time
 from datetime import datetime, timedelta
 from pathlib import Path
-from urllib.parse import parse_qs
+from urllib.parse import parse_qs, urlsplit
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from zoneinfo import ZoneInfo
 
@@ -120,6 +120,7 @@ def _make_handler(s: Settings):
     # Browser schicken ein Cookie nur für den Pfad selbst und für das, was mit "/" darunter liegt.
     cookie_path = f"{prefix}/"
     vote_re = re.compile(rf"^{re.escape(prefix)}/v/([A-Za-z0-9_-]{{1,64}})/(up|down)$")
+    pick_re = re.compile(rf"^{re.escape(status_path)}/pick/([A-Za-z0-9_-]{{1,64}})$")
     topic_re = re.compile(rf"^{re.escape(prefix)}/topic/([a-z0-9-]{{1,64}})\.xml$")
     pixel_re = re.compile(rf"^{re.escape(prefix)}/p/([A-Za-z0-9_-]{{1,64}})\.gif$")
     last_feed_fetch = [None]  # Zeitpunkt des letzten Feed-Abrufs, für die Pixel-Messung
@@ -187,8 +188,11 @@ def _make_handler(s: Settings):
 
         do_HEAD = do_GET
 
-        def do_POST(self):  # noqa: N802 – nur die Anmeldung
+        def do_POST(self):  # noqa: N802 – Anmeldung und Nachholen
             path = self.path.partition("?")[0]
+            m = pick_re.match(path)
+            if m:
+                return self._pick(m.group(1))
             if not s.status_password or path != status_path + "/login":
                 return self._send(404, b"not found", "text/plain")
             try:
@@ -210,6 +214,24 @@ def _make_handler(s: Settings):
             cookie = auth.set_cookie_header(auth.make_cookie(s.status_password, s.feed_token), cookie_path,
                                             secure=s.public_url.startswith("https://"))
             return self._see_other(status_path, cookie)
+
+        def _pick(self, entry_id):
+            """Artikel aus "Knapp nicht drin" in den neuesten Digest holen (Status-Seite, angemeldet)."""
+            if not self._signed_in():
+                return self._send(401, b"nicht angemeldet", "text/plain; charset=utf-8", cache=False)
+            origin = self.headers.get("Origin")
+            if origin and urlsplit(origin).netloc != (self.headers.get("Host") or ""):
+                return self._send(403, b"fremde Seite", "text/plain; charset=utf-8")  # kein Klick von außen
+            from .pick import PickError, pick
+            try:
+                item = pick(s, entry_id)
+            except PickError as e:
+                return self._send(e.code, str(e).encode(), "text/plain; charset=utf-8", cache=False)
+            except Exception as e:  # noqa: BLE001
+                log.exception("Nachholen fehlgeschlagen")
+                return self._send(500, f"Fehler: {type(e).__name__}".encode(), "text/plain; charset=utf-8")
+            return self._send(200, json.dumps(item, ensure_ascii=False).encode(), "application/json; charset=utf-8",
+                              cache=False)
 
         def _signed_in(self) -> bool:
             return not s.status_password or auth.valid_cookie(

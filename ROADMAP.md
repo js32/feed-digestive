@@ -49,6 +49,7 @@ The goal is to send as little about *you* as possible.
 - [x] **Topic feeds:** one feed per topic of your profile (`/<token>/topic/<topic>.xml`)
 - [x] **Profile suggestion** (`profile-suggest`): a readable proposal for `interests.md` from clicks and
       stars – never applied automatically
+- [x] **"In den Digest"** for articles that just missed it – the strongest learning signal (2.0)
 - [ ] Profile suggestion also proposes new `laya_questions.json` topics
 - [x] Embeddings as learning features, so learning from clicks works without Laya (`PREFILTER=embeddings`)
 

@@ -366,6 +366,7 @@ signals count, each article by its strongest one:
 
 | Signal | How it's detected | Weight |
 |---|---|---|
+| ↑ **Picked** | "In den Digest" on the status page for an article that just missed it – the strongest signal, because this is exactly where the selection was wrong | 2.0 |
 | ★ **Starred** | star in your reader, on the digest entry or the original article | 1.5 |
 | ✓ **Clicked "→ Zum Artikel"** | redirect through your own server | 1.0 |
 | 👁 **Read in your reader** | off by default (`READ_SIGNAL`), see below | 0.3 |
@@ -379,6 +380,12 @@ deleted, so the model follows interests that shift. `0` turns fading off.
 - **Clicks:** links in the digest point to `your.domain/<token>/r/<id>`, which records the click
   and redirects to the article. Crawlers, link previews and scripts don't count. The target
   site sees neither your secret path (`Referrer-Policy: no-referrer`) nor that you came from the digest.
+- **Picked:** the status page lists the best articles that just missed the digest ("Knapp nicht
+  drin"), each with an **"In den Digest"** button. One tap fetches the article from your reader,
+  writes its title and excerpt like for the others and adds it to the newest digest in its own
+  section "Von dir nachgeholt" (marked ↑); the feed is updated right away. Needs the status page
+  login if you set `STATUS_PASSWORD`; doesn't work while a digest is being built. Articles far below
+  the cut-off aren't listed – a star in your reader still counts for those.
 - **No explicit "less of this":** the 👍/👎 links of v1.1 are gone – readers that load the full
   article dropped them anyway, and "shown, but left alone" does the same job without a tap. A late
   click still turns such an example positive.
@@ -626,7 +633,8 @@ don't touch.
   **"Warum steht das hier?"** per article: how it was selected (regular, topic variety, filler, random
   pick), the score with the LLM's reason, its topic, the pre-filter's value and how it got through
   (by value, via a seat for its topic, as a control sample), and the similarity to a starred article –
-  plus the best articles that just missed it
+  plus the best articles that just missed it, each with **"In den Digest"** to add it by hand (see
+  [Learning](#learning-from-what-you-read))
 - the topic feeds with their addresses
 - reports: what was learned, Laya questions, privacy, and the profile suggestion
 - how scores of the last 7 days are spread around `MIN_SCORE` and `FLOOR_SCORE`, as a hint for

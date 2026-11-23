@@ -6,7 +6,8 @@ dass du einen Artikel anklickst oder markierst.
 
 Labels:
   1    Interesse gezeigt – gewichtet nach dem stärksten Signal: im Reader angelesen 0,3,
-       „Zum Artikel“ geklickt 1,0, Stern 1,5 (feedback.SIGNAL_WEIGHTS)
+       „Zum Artikel“ geklickt 1,0, Stern 1,5, von dir in den Digest nachgeholt 2,0
+       (feedback.SIGNAL_WEIGHTS)
   0    im Digest gezeigt, aber nach FEEDBACK_DAYS weder geklickt noch markiert
   0    nie gezeigt und nie markiert – nur mit kleinem Gewicht (unbekannt ≠ uninteressant)
 
@@ -64,7 +65,7 @@ def build_dataset(data_dir: Path, feedback_days: int, half_life_days: float = 0,
     for r in history:
         latest[str(r["entry_id"])] = r
     X, y, w = [], [], []
-    stats = {"pos": 0, "pos_weight": 0.0, "read": 0, "click": 0, "star": 0,
+    stats = {"pos": 0, "pos_weight": 0.0, "read": 0, "click": 0, "star": 0, "pick": 0,
              "neg_shown": 0, "neg_unshown": 0, "half_life_days": half_life_days}
     for eid, r in latest.items():
         if eid in sig:
@@ -152,7 +153,7 @@ def describe(data_dir: Path, feedback_days: int, labels: dict[str, str], half_li
     """Lesbare Übersicht für `python -m app learn`."""
     learner = retrain(data_dir, feedback_days, half_life_days)
     X, y, w, stats = build_dataset(data_dir, feedback_days, half_life_days)
-    lines = [f"Rückmeldungen: {stats['pos']} positiv ({stats['star']} Stern, "
+    lines = [f"Rückmeldungen: {stats['pos']} positiv ({stats['pick']} nachgeholt, {stats['star']} Stern, "
              f"{stats['click']} geklickt, {stats['read']} nur angelesen; gewichtet {stats['pos_weight']:.1f}), "
              f"{stats['neg_shown']} gezeigt ohne Klick, {stats['neg_unshown']} nie gezeigt",
              (f"Verblassen: ein Signal zählt nach {half_life_days:g} Tagen noch halb (SIGNAL_HALF_LIFE_DAYS)"
