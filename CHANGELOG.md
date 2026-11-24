@@ -2,6 +2,9 @@
 
 ## Unreleased
 
+- **Memory is freed after each run:** the scheduled digest now runs in its own process. Before, it ran inside the
+  web server, and Python kept the 1–2.5 GB of Laya/PyTorch after the run until the container restarted. If a run
+  is killed for lack of memory, feed and status page keep working and you get a push message (ntfy/Bark).
 - **"In den Digest"** on the status page: the best articles that just missed the digest ("Knapp nicht drin", now
   up to 8) get a button that adds them to the newest digest by hand – with title and excerpt, in their own
   section "Von dir nachgeholt" (↑), feed updated right away. Counts as the strongest learning signal (2.0, fades

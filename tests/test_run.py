@@ -146,3 +146,33 @@ def test_recurring_titles_are_only_blocked_for_two_weeks(settings):
     urls, titles = D.already_shown(settings.data_dir)
     assert urls == {D._norm_url("https://a.example/1"), D._norm_url("https://a.example/2")}
     assert titles == {D._title_key("Ein ganz neuer Artikeltitel")}
+
+
+def test_scheduled_run_happens_in_a_child_process(settings, monkeypatch):
+    """Der Webserver-Prozess lädt nie selbst Laya/PyTorch – sonst bliebe der Speicher belegt."""
+    from app import __main__ as M
+    from app import notify
+    seen, sent = [], []
+    monkeypatch.setattr(M.subprocess, "run", lambda cmd, env, cwd: (seen.append((cmd, env)),
+                                                                    type("R", (), {"returncode": 0}))[1])
+    monkeypatch.setattr(notify, "run_failed", lambda s, e: sent.append(str(e)))
+    assert M._run_in_child(settings, "Zeitplan") is True
+    cmd, env = seen[0]
+    assert cmd[1:] == ["-m", "app", "run"] and env["DIGEST_RUN_SOURCE"] == "Zeitplan"
+    assert sent == []
+    monkeypatch.setattr(M.subprocess, "run", lambda cmd, env, cwd: type("R", (), {"returncode": -9}))
+    assert M._run_in_child(settings) is False
+    assert "zu wenig Speicher" in sent[0]                         # vom OOM-Killer beendet: Nachricht
+    monkeypatch.setattr(M.subprocess, "run", lambda cmd, env, cwd: type("R", (), {"returncode": 1}))
+    sent.clear()
+    assert M._run_in_child(settings) is False and sent == []      # normaler Fehler: meldet der Lauf selbst
+
+
+def test_child_reports_its_source(settings, monkeypatch, env):
+    from app import __main__ as M
+    from app import status as S
+    env.setenv("DIGEST_RUN_SOURCE", "Zeitplan")
+    monkeypatch.setattr(M, "run", lambda s: None)
+    monkeypatch.setattr(M.sys, "argv", ["app", "run"])
+    M.main()
+    assert S._load(settings.data_dir / "status" / "run.json", {})["last"]["source"] == "Zeitplan"

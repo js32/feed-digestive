@@ -14,6 +14,7 @@
 from __future__ import annotations
 
 import json
+import os
 import logging
 import re
 import subprocess
@@ -56,6 +57,22 @@ def _run_safely(s: Settings, source: str = "Zeitplan") -> bool:
     finally:
         reset_rate_limits()
     return False
+
+
+def _run_in_child(s: Settings, source: str = "Zeitplan") -> bool:
+    """Geplanter Lauf in einem eigenen Prozess. Laya, PyTorch und Embeddings belegen während des Laufs
+    1–2,5 GB; Python gibt diesen Speicher nach dem Lauf nicht ans System zurück. Endet der Prozess,
+    ist er sofort wieder frei – und wird ein Lauf wegen Speichermangels beendet, läuft der Webserver
+    (Feed, Status-Seite) trotzdem weiter."""
+    env = {**os.environ, "DIGEST_RUN_SOURCE": source}
+    r = subprocess.run([sys.executable, "-m", "app", "run"], env=env,
+                       cwd=str(Path(__file__).resolve().parent.parent))
+    if r.returncode < 0 or r.returncode == 137:
+        sig = -r.returncode if r.returncode < 0 else 9
+        reason = " – vermutlich zu wenig Speicher" if sig == 9 else ""
+        log.error("Lauf vom System beendet (Signal %d)%s", sig, reason)
+        notify.run_failed(s, RuntimeError(f"Lauf vom System beendet (Signal {sig}){reason}"))
+    return r.returncode == 0
 
 
 def _poll_stars(s: Settings) -> None:
@@ -297,7 +314,7 @@ def serve(s: Settings) -> None:
     if s.star_poll_minutes > 0 and (s.use_starred or s.learn):
         threading.Thread(target=_poll_stars, args=(s,), daemon=True).start()
     if s.run_on_start:
-        _run_safely(s)
+        _run_in_child(s, "Start")
     while True:
         nxt = _next_run(s)
         status.next_run = nxt
@@ -305,7 +322,7 @@ def serve(s: Settings) -> None:
         while (remaining := (nxt - datetime.now(nxt.tzinfo)).total_seconds()) > 0:
             time.sleep(min(remaining, 300))
         status.next_run = None
-        _run_safely(s)
+        _run_in_child(s)
 
 
 def check(s: Settings) -> None:
@@ -388,7 +405,7 @@ def main() -> None:
     if cmd == "serve":
         serve(s)
     elif cmd == "run":
-        if not _run_safely(s, "Befehl"):
+        if not _run_safely(s, os.environ.get("DIGEST_RUN_SOURCE") or "Befehl"):
             sys.exit(1)
     elif cmd == "dry-run":
         run(s, dry_run=True)

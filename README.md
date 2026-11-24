@@ -285,6 +285,8 @@ Tips:
   Changing `WITH_*` needs `docker compose build`.
 - `DIGEST_MEM_LIMIT` (default `3g`) protects the other services: if the digest hits the limit, only
   the digest is stopped. With level 1 or 2, `1g` is plenty.
+- Each scheduled run is a process of its own, so its memory is returned as soon as it ends; between
+  runs the container needs only a little RAM for the web server.
 - If a run or `check` ends without an error message, the kernel probably stopped it for lack of
   memory. `docker compose exec digest python -m app check; echo "Exit: $?"` – exit code `137` and an
   entry in `dmesg | grep -i oom` confirm it. Go one level lighter, or add swap.
