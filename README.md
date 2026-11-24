@@ -242,6 +242,26 @@ the articles themselves can be in any language (`LAYA_MODEL=auto` picks the Engl
 checkpoint per article and groups articles by language, so each model is loaded once per run;
 `multilingual` uses one model for all and is faster and lighter).
 
+**Trying Laya 0.5 and its "vega" engine.** The image pins Laya 0.4.11. Laya 0.5 adds a second engine,
+*vega*: a small language model (Qwen3.5-0.8B) reads each article instead of the classic encoders,
+which may understand German and nuance better. On a CPU it runs in 32-bit precision, so the reader
+alone needs a bit over 3 GB of RAM (0.8 billion parameters × 4 bytes), and it is slower than the
+encoders. To try it without touching your daily runs:
+
+```bash
+# .env: LAYA_VERSION=0.5.3   (the classic models keep working the same way)
+sh deploy/update.sh
+docker compose exec digest python -m app laya-try auto 20   # your current setup, as a baseline
+docker compose exec digest python -m app laya-try vega 20   # the same 20 articles with vega
+```
+
+`laya-try` takes the articles Mistral scored most recently, fetches their text from your reader and
+reports time per article, peak memory, and how well the pre-filter's ranking matches Mistral's
+scores – which is what matters: does the pre-filter let through what Mistral rates highly? Nothing
+is saved. Switch with `LAYA_MODEL=vega` only if vega clearly wins and your server has the RAM
+(raise `DIGEST_MEM_LIMIT` accordingly). `LAYA_VEGA_READER=4b` selects the larger reader – far too
+big for a small server.
+
 Two ways to run it:
 - **Laya + LLM** (recommended): `PREFILTER=laya` plus a scoring provider.
 - **Laya only**: `SCORING_PROVIDER=none`, `MIN_SCORE=4`. Scoring costs nothing; only the
@@ -488,7 +508,8 @@ Laya only (`PREFILTER=laya`):
 
 | Setting | Default | Description |
 |---|---|---|
-| `LAYA_MODEL` | `auto` | `auto`: English articles to the English checkpoint, others to the multilingual one. `multilingual` or `english`: one model for all (less RAM). |
+| `LAYA_MODEL` | `auto` | `auto`: English articles to the English checkpoint, others to the multilingual one. `multilingual` or `english`: one model for all (less RAM). `vega`: Laya 0.5's language-model reader (needs `LAYA_VERSION=0.5.3`, 3+ GB RAM; see "Trying Laya 0.5"). |
+| `LAYA_VEGA_READER` | `0.8b` | With `LAYA_MODEL=vega`: which reader (`4b` is much larger). |
 | `LAYA_MAX_LEN` | `1024` | Maximum tokens per article Laya reads. Lower (e.g. 512) is faster and uses less RAM. |
 | `LAYA_BATCH_SIZE` | `8` | Articles per forward pass. Lower (e.g. 2) uses less RAM. |
 | `LAYA_THREADS` | `0` | CPU threads for Laya. `0` = the cores this container may use (from the Docker `cpus:` limit). |
@@ -600,6 +621,7 @@ don't touch.
 
 | Setting | Default | Description |
 |---|---|---|
+| `LAYA_VERSION` | `0.4.11` | Laya version in the image: `0.4.11` (proven) or `0.5.3` (newer, adds `LAYA_MODEL=vega`). Needs `docker compose build` (`deploy/update.sh` does that). |
 | `WITH_LAYA` | `1` | Build the image with Laya (PyTorch CPU, ~1 GB larger). `0` for a slim image if you use `PREFILTER=embeddings` or `none`. Needs `docker compose build`. Versions of PyTorch, transformers & co. are pinned in `constraints-laya.txt`, so a rebuild doesn't silently pull a new PyTorch. |
 | `WITH_EMBEDDINGS` | `1` | Build the image with fastembed (~200 MB), needed for `PREFILTER=embeddings` and `EMBEDDINGS=true`. |
 | `DIGEST_MEM_LIMIT` | `3g` | Memory limit for the digest container. |
@@ -621,6 +643,7 @@ don't touch.
 | `docker compose exec digest python -m app privacy-report [days]` | what was sent to LLM providers in the last days (default 30): calls, characters, articles, and which parts of your profile |
 | `docker compose exec digest python -m app opens-report [days]` | evaluate the `OPEN_PIXEL` measurement: does your reader load the image only when you open an entry? |
 | `docker compose exec digest python -m app laya-report` | evaluate each Laya question against LLM scores, clicks and stars (hit rate, correlation, overlaps, disagreements) |
+| `docker compose exec digest python -m app laya-try MODEL [N]` | measure a Laya model (`auto`, `english`, `multilingual`, `vega`) on your N most recently scored articles: speed, memory, agreement with Mistral |
 | `docker compose exec digest python -m app laya-questions` | write a Laya question catalogue from `interests.md` (never overwrites an existing one) |
 | `sh deploy/update.sh` | update safely: `git pull`, build the new image while the old container keeps working, wait until no digest is running, then restart |
 

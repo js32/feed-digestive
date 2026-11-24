@@ -10,6 +10,7 @@
   python -m app laya-questions  Laya-Fragen aus interests.md erzeugen
   python -m app privacy-report [Tage]  was in den letzten Tagen an LLM-Anbieter ging
   python -m app profile-suggest  Vorschlag für interests.md aus deinen Klicks und Sternen
+  python -m app laya-try MODELL [N]  Laya-Modell (auto|english|multilingual|vega) auf N eigenen Artikeln messen
 """
 from __future__ import annotations
 
@@ -439,6 +440,11 @@ def main() -> None:
     elif cmd == "privacy-report":
         days = int(sys.argv[2]) if len(sys.argv) > 2 and sys.argv[2].isdigit() else 30
         print(audit.report(s.data_dir, days))
+    elif cmd == "laya-try":
+        from .laya_try import run as laya_try
+        model = sys.argv[2] if len(sys.argv) > 2 else ""
+        n = int(sys.argv[3]) if len(sys.argv) > 3 and sys.argv[3].isdigit() else 20
+        print(laya_try(s, model, n))
     elif cmd == "profile-suggest":
         from .profile_suggest import suggest
         print(suggest(s))

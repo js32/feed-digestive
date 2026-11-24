@@ -24,6 +24,8 @@ services:
         WITH_LAYA: "${WITH_LAYA:-1}"
         # 1 = lokale Embeddings (Duplikate, Themengruppen, Stern-Vergleich), aktivieren mit EMBEDDINGS=true
         WITH_EMBEDDINGS: "${WITH_EMBEDDINGS:-1}"
+        # Laya-Version: 0.4.11 (bewährt) oder 0.5.3 (zum Ausprobieren, kann LAYA_MODEL=vega)
+        LAYA_VERSION: "${LAYA_VERSION:-0.4.11}"
     image: feed-digestive:local
     container_name: feed-digestive
     restart: unless-stopped

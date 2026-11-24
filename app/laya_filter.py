@@ -52,7 +52,22 @@ class LayaFilter:
         self.model = None if (model or "").lower() == "auto" else model
         self.max_len = max_len
         self.batch_size = batch_size
-        self.router = Router(device=device or os.environ.get("LAYA_DEVICE") or None, max_loaded=1)
+        try:
+            from importlib.metadata import version
+            self.laya_version = version("laya")
+        except Exception:  # noqa: BLE001
+            self.laya_version = "?"
+        router_kwargs = {"device": device or os.environ.get("LAYA_DEVICE") or None, "max_loaded": 1}
+        if (self.model or "").lower() == "vega":
+            # Laya 0.5: ein kleines Sprachmodell (Standard Qwen3.5-0.8B) liest den Artikel statt der
+            # bisherigen Encoder – braucht deutlich mehr RAM und Zeit, siehe README
+            if not self.laya_version.startswith(("0.5", "0.6", "0.7", "0.8", "0.9", "1.")):
+                raise SystemExit(f"LAYA_MODEL=vega braucht Laya 0.5 oder neuer (installiert: {self.laya_version}). "
+                                 "Image mit LAYA_VERSION=0.5.3 bauen.")
+            router_kwargs["vega"] = os.environ.get("LAYA_VEGA_READER") or True
+            self.model = "vega"
+        self.router = Router(**router_kwargs)
+        log.info("Laya %s, Modell %s", self.laya_version, self.model or "auto")
         self.questions = self._build_questions()
 
     # ------------------------------------------------------------------

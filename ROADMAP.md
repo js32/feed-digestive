@@ -59,6 +59,10 @@ Laya stays the core pre-filter – a local model that answers readable questions
 what sets this project apart. Embeddings stay as the light alternative for small servers. That makes
 Laya's speed and memory use the open issue:
 
+- [x] Laya 0.5 selectable (`LAYA_VERSION`), `LAYA_MODEL=vega` to try, `laya-try` to compare models on your own
+      articles
+- [ ] Decide after `laya-try` on the server: stay with the classic encoders, or switch to vega if it clearly wins
+      and fits in RAM
 - [ ] **Laya via ONNX Runtime** (`LAYA_BACKEND=onnx`, same fp32 weights, identical answers, ~1.45× faster on CPU
       per Laya's authors) – implemented on branch `onnx`; the export failed on a full disk and has not been
       tested on a real checkpoint yet. Next step: export with enough free disk space, compare answers, merge

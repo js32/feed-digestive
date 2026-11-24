@@ -1,5 +1,14 @@
 # Changelog
 
+## Unreleased
+
+- **Laya 0.5 to try:** `LAYA_VERSION=0.5.3` in `.env` builds the image with the current Laya (default stays
+  0.4.11). It adds `LAYA_MODEL=vega`, a small language model as reader instead of the classic encoders – likely
+  better with German, but 3+ GB of RAM and slower on a CPU. Dependencies are pinned in `constraints-laya.txt`.
+- **`python -m app laya-try MODEL [N]`** measures a Laya model on your own most recently scored articles: time
+  per article, peak memory, rank correlation with Mistral's scores and how many of Mistral's best land in the
+  pre-filter's top third. Run it once per model to compare before switching. Saves nothing.
+
 ## v1.3 – 2026-11-24
 
 Pull in what the selection missed, a login that iPhone Safari keeps, and memory that is freed after each run.
