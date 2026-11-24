@@ -18,6 +18,7 @@ import json
 import os
 import logging
 import re
+import signal
 import subprocess
 import sys
 
@@ -298,6 +299,9 @@ def _make_handler(s: Settings):
 
 
 def serve(s: Settings) -> None:
+    # Stoppsignal von Docker: sofort sauber beenden. Ein gerade laufender Digest (eigener Prozess)
+    # bekommt das Signal mit und bricht ab – deploy/update.sh wartet deshalb vorher auf das Laufende.
+    signal.signal(signal.SIGTERM, lambda *_: sys.exit(0))
     # Feed beim Start aus den gespeicherten Digests neu schreiben – so greifen Änderungen
     # an FEED_MODE, Layout oder Titel sofort, nicht erst nach dem nächsten Lauf
     try:

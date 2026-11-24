@@ -29,6 +29,9 @@ services:
     image: feed-digestive:local
     container_name: feed-digestive
     restart: unless-stopped
+    # kleiner init-Prozess als PID 1: reicht das Stoppsignal weiter (Neustart in Sekunden statt nach
+    # 10 s Wartezeit) und räumt beendete Lauf-Prozesse ab
+    init: true
     env_file: .env
     environment:
       TZ: "${TZ:-Europe/Berlin}"

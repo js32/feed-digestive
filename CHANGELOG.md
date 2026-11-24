@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- Container stops in a second instead of after Docker's 10-second grace period: `init: true` in
+  `docker-compose.yml` and a handler for the stop signal. Also cleans up finished run processes.
 - **Laya 0.5 to try:** `LAYA_VERSION=0.5.3` in `.env` builds the image with the current Laya (default stays
   0.4.11). It adds `LAYA_MODEL=vega`, a small language model as reader instead of the classic encoders – likely
   better with German, but 3+ GB of RAM and slower on a CPU. Dependencies are pinned in `constraints-laya.txt`.
