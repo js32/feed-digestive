@@ -1,7 +1,7 @@
 # Roadmap
 
 Ideas and planned work for feed-digestive. Checked items are done and part of the latest release
-(v1.2). See [CHANGELOG.md](CHANGELOG.md) for releases.
+(v1.3). See [CHANGELOG.md](CHANGELOG.md) for releases.
 
 ## Privacy
 

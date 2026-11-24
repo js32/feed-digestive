@@ -1,6 +1,11 @@
 # Changelog
 
-## Unreleased
+## v1.3 – 2026-11-24
+
+Pull in what the selection missed, a login that iPhone Safari keeps, and memory that is freed after each run.
+
+**Upgrading from v1.2:** set `STATUS_PASSWORD` in `.env`; if you followed v1.2 and added `auth_basic` to the
+`/status` location in nginx, remove those two lines afterwards.
 
 - **Memory is freed after each run:** the scheduled digest now runs in its own process. Before, it ran inside the
   web server, and Python kept the 1–2.5 GB of Laya/PyTorch after the run until the container restarted. If a run
